@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Etiquetas para OMB — Pimaco A4250</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f3f6fb;
+    --panel:#ffffff;
+    --ink:#122036;
+    --muted:#5b6b82;
+    --line:#d9e2ef;
+    --accent:#1d5fd6;
+    --accent-ink:#ffffff;
+    --danger:#c0392b;
+    --focus:#1d5fd6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  header.app-header{
+    padding:20px 28px; border-bottom:1px solid var(--line); background:var(--panel);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  header.app-header h1{ font-size:18px; margin:0; font-weight:700; letter-spacing:-0.01em;}
+  header.app-header .sub{ color:var(--muted); font-size:13px; margin-top:2px;}
+  .steps{ display:flex; gap:6px; font-size:12px; color:var(--muted);}
+  .steps span{ padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
+  .steps span.active{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600;}
+  main{ max-width:1180px; margin:0 auto; padding:28px; }
+  section.step{ display:none; }
+  section.step.active{ display:block; animation: fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:24px; margin-bottom:18px;}
+  .card h2{ margin:0 0 4px; font-size:16px;}
+  .card p.hint{ color:var(--muted); font-size:13px; margin:0 0 16px;}
+  .dropzone{
+    border:2px dashed var(--line); border-radius:12px; padding:44px 20px; text-align:center;
+    cursor:pointer; transition:.15s; background:#fafaf8;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:#eaf1fd; }
+  .dropzone strong{ display:block; margin-bottom:4px; }
+  .dropzone .muted{ color:var(--muted); font-size:13px; }
+  input[type=file]{ display:none; }
+  button{
+    font-family:inherit; font-size:14px; border-radius:9px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); padding:10px 16px; cursor:pointer; transition:.12s;
+  }
+  button:hover{ border-color:var(--accent); color:var(--accent); }
+  button.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+  button.primary:hover{ opacity:.92; color:var(--accent-ink); }
+  button.ghost{ border-color:transparent; background:transparent; color:var(--muted); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  .row-actions{ display:flex; justify-content:space-between; margin-top:18px; gap:10px; flex-wrap:wrap;}
+  table.preview{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:10px; }
+  table.preview th, table.preview td{ border:1px solid var(--line); padding:6px 8px; text-align:left; white-space:nowrap; }
+  table.preview th{ background:#eaf1fd; font-weight:600; position:sticky; top:0; }
+  .table-scroll{ max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  label.field-label{ font-size:13px; font-weight:600; display:block; margin-bottom:6px; }
+  select, input[type=text], input[type=number]{
+    font-family:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); width:100%;
+  }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .checklist{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .checkitem{ display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; }
+  .checkitem input{ width:auto; }
+  .checkitem .colcode{ font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:5px; padding:1px 6px; }
+  .toggle-row{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-top:10px;}
+
+  /* editor */
+  .editor-wrap{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; }
+  .canvas-holder{ background:#e7edf6; padding:22px; border-radius:12px; }
+  #editorCanvas{
+    position:relative; background:#fff; box-shadow:0 0 0 1px var(--line), 0 6px 18px rgba(0,0,0,.06);
+    background-image:
+      linear-gradient(to right, #eaf0f9 1px, transparent 1px),
+      linear-gradient(to bottom, #eaf0f9 1px, transparent 1px);
+    background-size:16px 16px;
+    overflow:hidden;
+  }
+  .field{
+    position:absolute; cursor:grab; border:1.5px dashed transparent; padding:1px 3px;
+    user-select:none; line-height:1.05; white-space:nowrap; color:#111;
+  }
+  .field:hover{ border-color:#b9c3bd; }
+  .field.selected{ border-color:var(--accent); background:rgba(29,95,214,.08); }
+  .field.qr img{ display:block; width:100%; height:100%; }
+  .field.dragging{ cursor:grabbing; opacity:.85; }
+  .side-panel{ width:280px; flex:0 0 280px; }
+  .prop-row{ margin-bottom:14px; }
+  .prop-row label{ font-size:12.5px; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:4px;}
+  input[type=range]{ width:100%; }
+  .empty-note{ color:var(--muted); font-size:13px; padding:14px; text-align:center; border:1px dashed var(--line); border-radius:10px;}
+  .field-toolbar{ display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .field-toolbar button{ font-size:12.5px; padding:8px 12px; }
+
+  /* output / print */
+  .zoom-wrap{ background:#e7edf6; border-radius:12px; padding:24px; overflow:auto; max-height:640px; }
+  .page{
+    background:#fff; box-shadow:0 0 0 1px var(--line), 0 8px 20px rgba(0,0,0,.08);
+    position:relative; margin:0 auto 30px; page-break-after:always;
+  }
+  .label-slot{ position:absolute; overflow:hidden; }
+  .label-slot .field{ position:absolute; cursor:default; border:none !important; background:none !important; }
+  .page-badge{ position:absolute; top:-22px; left:0; font-size:11px; color:var(--muted); }
+  .config-note{ font-size:12px; color:var(--muted); margin-top:8px; }
+  .warn{ color:var(--danger); }
+
+  @media print{
+    header.app-header, .no-print, .card > h2, .card > p.hint { display:none !important; }
+    body{ background:#fff; }
+    main{ padding:0; max-width:none; }
+    .card{ border:none; padding:0; box-shadow:none; }
+    .zoom-wrap{ background:none; padding:0; max-height:none; overflow:visible; }
+    .page{ box-shadow:none; margin:0; }
+    @page{ size:A4; margin:0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <h1>Gerador de Etiquetas para OMB</h1>
+    <div class="sub">Planilha → QR Code → Etiquetas Pimaco A4250 (2 colunas × 5 linhas, 99 × 55,8 mm)</div>
+  </div>
+  <div class="steps" id="stepsNav">
+    <span data-step="upload" class="active">1. Planilha</span>
+    <span data-step="mapping">2. Colunas</span>
+    <span data-step="editor">3. Diagramação</span>
+    <span data-step="output">4. Gerar &amp; Imprimir</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- STEP 1: UPLOAD -->
+  <section class="step active" id="step-upload">
+    <div class="card">
+      <h2>1. Envie a planilha Excel</h2>
+      <p class="hint">Aceita .xlsx ou .xls. Os dados serão lidos direto pelas letras das colunas (A, B, C…), como na sua planilha.</p>
+      <div class="dropzone" id="dropzone">
+        <strong>Clique para escolher o arquivo</strong>
+        <div class="muted">ou arraste o .xlsx aqui</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+      </div>
+      <div id="uploadStatus" class="config-note"></div>
+    </div>
+
+    <div class="card" id="sheetPicker" style="display:none;">
+      <h2>Escolha a planilha (aba)</h2>
+      <p class="hint">Este arquivo tem mais de uma planilha. Selecione qual delas contém os dados a usar.</p>
+      <div class="grid2">
+        <div>
+          <label class="field-label">Planilha</label>
+          <select id="sheetSelect"></select>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="primary" style="width:100%;" onclick="loadSelectedSheet()">Usar esta planilha →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 2: MAPPING -->
+  <section class="step" id="step-mapping">
+    <div class="card">
+      <h2>2. Confira os dados e escolha as colunas</h2>
+      <p class="hint">Pré-visualização da planilha (linhas e colunas reais). Marque se a primeira linha é cabeçalho.</p>
+      <label class="toggle-row"><input type="checkbox" id="hasHeaderToggle" checked> A primeira linha contém os títulos das colunas (cabeçalho)</label>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table class="preview" id="previewTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Nomeie as colunas</h2>
+      <p class="hint">Use o nome de cabeçalho detectado ou digite um nome para identificar colunas sem cabeçalho (ex.: "Unidade", "Atleta").</p>
+      <div id="columnNamesRow" style="display:flex; gap:12px; overflow-x:auto; padding-bottom:6px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="grid2">
+        <div>
+          <label class="field-label">Coluna que será convertida em QR Code (código)</label>
+          <select id="codigoColSelect"></select>
+          <p class="hint" style="margin-top:8px;">Esta coluna não aparecerá como texto na etiqueta — apenas o QR code será gerado a partir dela.</p>
+        </div>
+        <div>
+          <label class="field-label">Colunas que devem aparecer como texto na etiqueta</label>
+          <div class="checklist" id="fieldChecklist"></div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost" onclick="goToStep('upload')">← Voltar</button>
+        <button class="primary" id="toEditorBtn" onclick="proceedToEditor()">Continuar para diagramação →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3: EDITOR -->
+  <section class="step" id="step-editor">
+    <div class="card">
+      <h2>3. Diagrame a etiqueta</h2>
+      <p class="hint">Arraste o QR code e os campos de texto para a posição que preferir dentro da etiqueta (99 × 55,8&nbsp;mm). Clique em um campo para ajustar tamanho da fonte, negrito e alinhamento. Os valores mostrados são apenas um exemplo (primeira linha da planilha).</p>
+      <div class="editor-wrap">
+        <div class="canvas-holder">
+          <div id="editorCanvas"></div>
+          <div class="field-toolbar no-print">
+            <button onclick="addStaticText()">+ Texto fixo</button>
+            <button onclick="resetLayout()">Restaurar layout padrão</button>
+          </div>
+        </div>
+        <div class="side-panel">
+          <div class="card" id="propsCard" style="padding:16px;">
+            <h2 style="font-size:14px;">Propriedades</h2>
+            <div id="propsBody"><p class="empty-note">Clique em um campo na etiqueta para editá-lo.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost" onclick="goToStep('mapping')">← Voltar</button>
+        <button class="primary" onclick="proceedToOutput()">Gerar etiquetas →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 4: OUTPUT -->
+  <section class="step" id="step-output">
+    <div class="card no-print">
+      <h2>Filtrar o que será impresso</h2>
+      <p class="hint">Escolha a coluna (por exemplo, Unidade) e marque quais valores devem entrar na impressão. Desmarque o que não deseja imprimir.</p>
+      <div class="grid2">
+        <div>
+          <label class="field-label">Coluna para filtrar</label>
+          <select id="filterColSelect" onchange="onFilterColumnChange()"></select>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="field-label" style="margin-bottom:0;">Valores a imprimir</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllFilterValues(true)">Selecionar todos</button>
+              <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllFilterValues(false)">Limpar</button>
+            </div>
+          </div>
+          <div class="checklist" id="filterValuesChecklist" style="max-height:190px; overflow:auto; margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card no-print">
+      <h2>Selecionar etiquetas individualmente</h2>
+      <p class="hint">Ative para escolher, uma a uma, quais pessoas devem ter etiqueta impressa — útil para reimprimir só alguns nomes.</p>
+      <label class="toggle-row"><input type="checkbox" id="individualFilterEnabled" onchange="onIndividualEnabledToggle()"> Selecionar etiquetas individualmente por nome</label>
+      <div id="individualFilterBody" style="display:none; margin-top:14px;">
+        <div class="grid2">
+          <div>
+            <label class="field-label">Coluna com o nome</label>
+            <select id="individualColSelect" onchange="onIndividualColumnChange()"></select>
+            <label class="field-label" style="margin-top:14px;">Buscar</label>
+            <input type="text" id="individualSearch" placeholder="Digite para filtrar a lista..." oninput="renderIndividualChecklistDOM(this.value)">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <label class="field-label" style="margin-bottom:0;">Etiquetas selecionadas</label>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllIndividual(true)">Selecionar todos</button>
+                <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllIndividual(false)">Limpar</button>
+              </div>
+            </div>
+            <div class="checklist" id="individualValuesChecklist" style="max-height:220px; overflow:auto; margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card no-print">
+      <h2>Ajuste fino da folha e impressão</h2>
+      <p class="hint">Valores padrão calculados para a folha Pimaco A4250 (A4, 2 colunas × 5 linhas, etiqueta 99 × 55,8&nbsp;mm). Imprima primeiro em papel comum e confira contra a folha de etiquetas antes de usar o adesivo — ajuste os valores abaixo se necessário.</p>
+      <div class="grid3">
+        <div>
+          <label class="field-label">Margem superior (mm)</label>
+          <input type="number" id="cfgMarginTop" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Margem esquerda (mm)</label>
+          <input type="number" id="cfgMarginLeft" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Espaçamento horizontal entre colunas (mm)</label>
+          <input type="number" id="cfgGapX" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Espaçamento vertical entre linhas (mm)</label>
+          <input type="number" id="cfgGapY" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Largura da etiqueta (mm)</label>
+          <input type="number" id="cfgLabelW" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Altura da etiqueta (mm)</label>
+          <input type="number" id="cfgLabelH" step="0.1">
+        </div>
+      </div>
+      <div class="config-note" id="cfgCheck"></div>
+      <div class="row-actions">
+        <button onclick="rebuildOutput()">Atualizar pré-visualização</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span id="exportStatus" class="config-note" style="margin:0;"></span>
+          <button class="ghost" onclick="goToStep('editor')">← Voltar à diagramação</button>
+          <button id="pdfBtn" onclick="savePDF()">⬇️ Salvar como PDF</button>
+          <button class="primary" id="printBtn" onclick="printPages()">🖨️ Imprimir</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="no-print">Pré-visualização (<span id="pageCountLabel"></span>)</h2>
+      <div class="zoom-wrap" id="outputPages"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* ---------------------------------------------------------
+   STATE
+--------------------------------------------------------- */
+const App = {
+  workbook: null,        // parsed XLSX workbook (all sheets)
+  currentSheetName: null,
+  aoa: [],              // array of arrays from the selected sheet
+  hasHeader: true,
+  dataRows: [],         // rows actually used (after header removed)
+  numCols: 0,
+  columnNames: [],       // editable display name per column index
+  manualColumnNames: new Set(), // columns the user manually renamed
+  codigoColIndex: 0,    // 0-based column index used for QR
+  textFields: [],       // [{colIndex, label}]
+  layout: {             // editor field layout, values in mm
+    qr: { x: 71, y: 27.8, size: 25 },
+    texts: {}           // key: fieldKey -> {x,y,fontSize,bold,align,label}
+  },
+  staticTexts: [],      // [{key, content, x,y,fontSize,bold,align}]
+  page: { marginTop: 9, marginLeft: 6, gapX: 0, gapY: 0, labelW: 99, labelH: 55.8, cols: 2, rows: 5 },
+  filter: { colIndex: null, selected: new Set() },
+  filterInitialized: false,
+  individualFilter: { enabled: false, colIndex: null, selectedRows: new Set() },
+  selectedFieldKey: null,
+  staticCounter: 0
+};
+
+const SCALE = 4; // px per mm in the editor canvas
+
+// Default QR position/size: bottom-right corner, small margin from the label edge
+function defaultQR(){
+  return { x: 68.5, y: 25.3, size: 25 };
+}
+
+const FONT_OPTIONS = [
+  { value: "Arial, Helvetica, sans-serif", label: "Arial" },
+  { value: "'Times New Roman', Times, serif", label: "Times New Roman" },
+  { value: "Georgia, serif", label: "Georgia" },
+  { value: "'Courier New', Courier, monospace", label: "Courier New" },
+  { value: "Verdana, Geneva, sans-serif", label: "Verdana" },
+  { value: "'Trebuchet MS', sans-serif", label: "Trebuchet MS" },
+  { value: "'Segoe UI', sans-serif", label: "Segoe UI" },
+  { value: "Impact, 'Arial Black', sans-serif", label: "Impact" },
+  { value: "'Comic Sans MS', cursive", label: "Comic Sans MS" }
+];
+
+function colLetter(index){
+  let s = '';
+  index = index + 1;
+  while (index > 0){
+    const rem = (index - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    index = Math.floor((index - 1) / 26);
+  }
+  return s;
+}
+
+/* ---------------------------------------------------------
+   NAVIGATION
+--------------------------------------------------------- */
+function goToStep(name){
+  document.querySelectorAll('section.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + name).classList.add('active');
+  document.querySelectorAll('#stepsNav span').forEach(s => s.classList.toggle('active', s.dataset.step === name));
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ---------------------------------------------------------
+   STEP 1: UPLOAD
+--------------------------------------------------------- */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file){
+  const status = document.getElementById('uploadStatus');
+  status.textContent = 'Lendo ' + file.name + '...';
+  document.getElementById('sheetPicker').style.display = 'none';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      if (!wb.SheetNames.length){ status.textContent = 'Nenhuma planilha encontrada neste arquivo.'; return; }
+      App.workbook = wb;
+      status.textContent = '✓ ' + file.name + ' carregado.';
+      if (wb.SheetNames.length === 1){
+        selectSheet(wb.SheetNames[0]);
+      } else {
+        showSheetPicker(wb.SheetNames);
+      }
+    } catch(err){
+      status.textContent = 'Não foi possível ler o arquivo. Confirme se é um .xlsx ou .xls válido.';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showSheetPicker(names){
+  const sel = document.getElementById('sheetSelect');
+  sel.innerHTML = '';
+  names.forEach(name => {
+    let rowCount = 0;
+    try{ rowCount = XLSX.utils.sheet_to_json(App.workbook.Sheets[name], { header: 1, defval: '' }).length; } catch(e){}
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + ' (' + rowCount + (rowCount === 1 ? ' linha' : ' linhas') + ')';
+    sel.appendChild(opt);
+  });
+  document.getElementById('sheetPicker').style.display = 'block';
+}
+
+function loadSelectedSheet(){
+  const name = document.getElementById('sheetSelect').value;
+  selectSheet(name);
+}
+
+function selectSheet(name){
+  const status = document.getElementById('uploadStatus');
+  const sheet = App.workbook.Sheets[name];
+  const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!aoa.length){ status.textContent = 'A planilha "' + name + '" está vazia.'; return; }
+
+  App.aoa = aoa;
+  App.numCols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
+  App.currentSheetName = name;
+
+  // reset mapping/layout state, since columns may differ between sheets
+  App.columnNames = [];
+  App.manualColumnNames = new Set();
+  App.codigoColIndex = 0;
+  App.textFields = [];
+  App.layout = { qr: defaultQR(), texts: {} };
+  App.staticTexts = [];
+  App.filter = { colIndex: null, selected: new Set() };
+  App.filterInitialized = false;
+  App.individualFilter = { enabled: false, colIndex: null, selectedRows: new Set() };
+
+  status.textContent = '✓ Usando a planilha "' + name + '" — ' + aoa.length + ' linha(s) encontrada(s).';
+  buildMappingStep();
+  goToStep('mapping');
+}
+
+/* ---------------------------------------------------------
+   STEP 2: MAPPING
+--------------------------------------------------------- */
+function buildMappingStep(){
+  document.getElementById('hasHeaderToggle').onchange = renderPreviewAndSelectors;
+  renderPreviewAndSelectors();
+}
+
+function renderPreviewAndSelectors(){
+  App.hasHeader = document.getElementById('hasHeaderToggle').checked;
+  App.dataRows = App.hasHeader ? App.aoa.slice(1) : App.aoa.slice(0);
+
+  // preview table (show up to 8 rows)
+  const table = document.getElementById('previewTable');
+  const previewRows = App.aoa.slice(0, 9);
+  let html = '<thead><tr><th>#</th>';
+  for (let c = 0; c < App.numCols; c++) html += '<th>' + colLetter(c) + '</th>';
+  html += '</tr></thead><tbody>';
+  previewRows.forEach((row, i) => {
+    const isHeaderRow = App.hasHeader && i === 0;
+    html += '<tr' + (isHeaderRow ? ' style="background:#eaf1fd;font-weight:600;"' : '') + '><td>' + (isHeaderRow ? 'Cabeçalho' : (i + (App.hasHeader?0:1))) + '</td>';
+    for (let c = 0; c < App.numCols; c++){
+      html += '<td>' + (row[c] !== undefined && row[c] !== '' ? String(row[c]) : '<span style="color:#bbb">—</span>') + '</td>';
+    }
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  initColumnNames(true);
+  renderColumnNameInputs();
+  renderSelectors();
+}
+
+// builds/refreshes App.columnNames from detected headers, keeping any manual edits
+function initColumnNames(preserveManual){
+  const prev = App.columnNames || [];
+  const next = [];
+  for (let c = 0; c < App.numCols; c++){
+    if (preserveManual && App.manualColumnNames.has(c) && prev[c] !== undefined){
+      next[c] = prev[c];
+      continue;
+    }
+    const headerText = (App.hasHeader && App.aoa[0] && App.aoa[0][c] !== undefined && App.aoa[0][c] !== '') ? String(App.aoa[0][c]) : '';
+    next[c] = headerText || ('Coluna ' + colLetter(c));
+  }
+  App.columnNames = next;
+}
+
+function renderColumnNameInputs(){
+  const wrap = document.getElementById('columnNamesRow');
+  wrap.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const item = document.createElement('div');
+    item.style.minWidth = '140px';
+    const badge = document.createElement('div');
+    badge.className = 'colcode';
+    badge.style.display = 'inline-block';
+    badge.style.marginBottom = '4px';
+    badge.textContent = colLetter(c);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = App.columnNames[c] || '';
+    input.placeholder = 'Coluna ' + colLetter(c);
+    input.addEventListener('input', () => updateColumnName(c, input.value));
+    item.appendChild(badge);
+    item.appendChild(input);
+    wrap.appendChild(item);
+  }
+}
+
+function updateColumnName(c, v){
+  App.columnNames[c] = v;
+  App.manualColumnNames.add(c);
+  renderSelectors();
+}
+
+// (re)builds the "código" select and the text-fields checklist from App.columnNames,
+// preserving whatever the user already picked/checked
+function renderSelectors(){
+  const codigoSelect = document.getElementById('codigoColSelect');
+  const prevCodigo = codigoSelect.value;
+  const prevChecked = {};
+  document.querySelectorAll('#fieldChecklist input[type=checkbox]').forEach(chk => {
+    prevChecked[chk.dataset.col] = chk.checked;
+  });
+
+  codigoSelect.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = colLetter(c) + ' — ' + (App.columnNames[c] || ('Coluna ' + colLetter(c)));
+    codigoSelect.appendChild(opt);
+  }
+  const prevCodigoNum = parseInt(prevCodigo, 10);
+  codigoSelect.value = (!isNaN(prevCodigoNum) && prevCodigoNum < App.numCols) ? prevCodigoNum : (App.codigoColIndex || 0);
+
+  const checklist = document.getElementById('fieldChecklist');
+  checklist.innerHTML = '';
+  const defaultChecked = new Set([1, 2, 4, 5]); // B, C, E, F by default, per the request
+  for (let c = 0; c < App.numCols; c++){
+    const item = document.createElement('label');
+    item.className = 'checkitem';
+    let checked;
+    if (Object.prototype.hasOwnProperty.call(prevChecked, String(c))) checked = prevChecked[c];
+    else if (App.textFields.length) checked = App.textFields.some(f => f.colIndex === c);
+    else checked = defaultChecked.has(c);
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.col = c;
+    chk.checked = checked;
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'colcode';
+    codeSpan.textContent = colLetter(c);
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = App.columnNames[c] || ('Coluna ' + colLetter(c));
+
+    item.appendChild(chk);
+    item.appendChild(codeSpan);
+    item.appendChild(nameSpan);
+    checklist.appendChild(item);
+  }
+}
+
+function collectMapping(){
+  App.codigoColIndex = parseInt(document.getElementById('codigoColSelect').value, 10);
+  const checks = document.querySelectorAll('#fieldChecklist input[type=checkbox]');
+  const fields = [];
+  checks.forEach(chk => {
+    if (chk.checked){
+      const c = parseInt(chk.dataset.col, 10);
+      if (c === App.codigoColIndex) return; // never duplicate the QR column as text
+      const label = (App.columnNames[c] && App.columnNames[c].trim()) ? App.columnNames[c] : ('Coluna ' + colLetter(c));
+      fields.push({ colIndex: c, label, key: 'col' + c });
+    }
+  });
+  App.textFields = fields;
+}
+
+/* ---------------------------------------------------------
+   STEP 3: EDITOR
+--------------------------------------------------------- */
+function proceedToEditor(){
+  collectMapping();
+  if (!App.textFields.length && App.dataRows.length === 0){
+    alert('A planilha não tem linhas de dados.');
+    return;
+  }
+  initLayoutDefaults();
+  buildEditorCanvas();
+  goToStep('editor');
+}
+
+function normalizeText(s){
+  return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function initLayoutDefaults(){
+  // only set defaults for fields that don't already have a layout (keeps user edits on Back/Forward)
+  if (!App.layout.qr) App.layout.qr = defaultQR();
+
+  const marginX = 6;
+
+  const findField = (name) => App.textFields.find(f => normalizeText(f.label) === name);
+  const fAtleta = findField('atleta');
+  const fUnidade = findField('unidade');
+  const fModalidade = findField('modalidade');
+  const fCargo = findField('cargo');
+  const knownKeys = new Set([fAtleta, fUnidade, fModalidade, fCargo].filter(Boolean).map(f => f.key));
+
+  // 1) Atleta — 4.5mm, negrito
+  if (fAtleta){
+    if (!App.layout.texts[fAtleta.key]){
+      App.layout.texts[fAtleta.key] = { x: marginX - 3, y: 7, fontSize: 4.5, bold: true, align: 'left', label: fAtleta.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fAtleta.key].label = fAtleta.label;
+    }
+  }
+
+  // 2) legenda fixa "UNIDADE" — 3mm, negrito — seguida do valor da Unidade — 3mm, sem negrito
+  if (fUnidade){
+    const capKey = 'autoCaption_unidade';
+    if (!App.staticTexts.some(s => s.key === capKey)){
+      App.staticTexts.push({ key: capKey, content: 'UNIDADE', x: marginX, y: 23, fontSize: 3, bold: true, align: 'left', fontFamily: FONT_OPTIONS[0].value, auto: true });
+    }
+    if (!App.layout.texts[fUnidade.key]){
+      App.layout.texts[fUnidade.key] = { x: marginX, y: 28, fontSize: 3, bold: false, align: 'left', label: fUnidade.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fUnidade.key].label = fUnidade.label;
+    }
+  }
+
+  // 3) Modalidade — 3mm, sem negrito
+  if (fModalidade){
+    if (!App.layout.texts[fModalidade.key]){
+      App.layout.texts[fModalidade.key] = { x: marginX, y: 40, fontSize: 3, bold: false, align: 'left', label: fModalidade.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fModalidade.key].label = fModalidade.label;
+    }
+  }
+
+  // 4) Cargo — 3mm, sem negrito
+  if (fCargo){
+    if (!App.layout.texts[fCargo.key]){
+      App.layout.texts[fCargo.key] = { x: marginX, y: 46, fontSize: 3, bold: false, align: 'left', label: fCargo.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fCargo.key].label = fCargo.label;
+    }
+  }
+
+  // any other selected column that isn't Atleta/Unidade/Modalidade/Cargo: stack it below, generic style
+  let cursorY = 52;
+  App.textFields.forEach(f => {
+    if (knownKeys.has(f.key)) return;
+    if (!App.layout.texts[f.key]){
+      App.layout.texts[f.key] = { x: marginX, y: cursorY, fontSize: 3.5, bold: false, align: 'left', label: f.label, fontFamily: FONT_OPTIONS[0].value };
+      cursorY += 8;
+    } else {
+      App.layout.texts[f.key].label = f.label;
+    }
+  });
+}
+
+function buildEditorCanvas(){
+  const canvas = document.getElementById('editorCanvas');
+  canvas.style.width = (App.page.labelW * SCALE) + 'px';
+  canvas.style.height = (App.page.labelH * SCALE) + 'px';
+  canvas.innerHTML = '';
+  App.selectedFieldKey = null;
+  renderProps();
+
+  // QR field
+  const qrEl = document.createElement('div');
+  qrEl.className = 'field qr';
+  qrEl.dataset.key = 'qr';
+  positionFieldEl(qrEl, App.layout.qr.x, App.layout.qr.y, App.layout.qr.size, App.layout.qr.size);
+  const img = document.createElement('img');
+  img.src = makeQRDataURL(sampleValue(App.codigoColIndex) || '000000');
+  qrEl.appendChild(img);
+  canvas.appendChild(qrEl);
+  makeDraggable(qrEl);
+  qrEl.addEventListener('click', () => selectField('qr'));
+
+  // text fields
+  App.textFields.forEach(f => {
+    const cfg = App.layout.texts[f.key];
+    const el = document.createElement('div');
+    el.className = 'field text';
+    el.dataset.key = f.key;
+    el.textContent = String(sampleValue(f.colIndex) || f.label);
+    applyTextStyle(el, cfg);
+    positionFieldEl(el, cfg.x, cfg.y, null, null);
+    canvas.appendChild(el);
+    makeDraggable(el);
+    el.addEventListener('click', () => selectField(f.key));
+  });
+
+  // static texts
+  App.staticTexts.forEach(st => {
+    const el = document.createElement('div');
+    el.className = 'field text static';
+    el.dataset.key = st.key;
+    el.textContent = st.content;
+    applyTextStyle(el, st);
+    positionFieldEl(el, st.x, st.y, null, null);
+    canvas.appendChild(el);
+    makeDraggable(el);
+    el.addEventListener('click', () => selectField(st.key));
+  });
+}
+
+function sampleValue(colIndex){
+  if (!App.dataRows.length) return '';
+  const row = App.dataRows[0];
+  return row ? row[colIndex] : '';
+}
+
+function positionFieldEl(el, xmm, ymm, wmm, hmm){
+  el.style.left = (xmm * SCALE) + 'px';
+  el.style.top = (ymm * SCALE) + 'px';
+  if (wmm) el.style.width = (wmm * SCALE) + 'px';
+  if (hmm) el.style.height = (hmm * SCALE) + 'px';
+}
+
+function applyTextStyle(el, cfg){
+  el.style.fontSize = (cfg.fontSize * SCALE) + 'px';
+  el.style.fontWeight = cfg.bold ? '700' : '400';
+  el.style.textAlign = cfg.align || 'left';
+  el.style.fontFamily = cfg.fontFamily || FONT_OPTIONS[0].value;
+}
+
+let dragState = null;
+function makeDraggable(el){
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    selectField(el.dataset.key);
+    const canvas = document.getElementById('editorCanvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    dragState = {
+      el,
+      offsetX: e.clientX - elRect.left,
+      offsetY: e.clientY - elRect.top,
+      canvasRect
+    };
+    el.classList.add('dragging');
+  });
+}
+document.addEventListener('mousemove', (e) => {
+  if (!dragState) return;
+  const { el, offsetX, offsetY, canvasRect } = dragState;
+  let left = e.clientX - canvasRect.left - offsetX;
+  let top = e.clientY - canvasRect.top - offsetY;
+  left = Math.max(0, Math.min(left, canvasRect.width - el.offsetWidth));
+  top = Math.max(0, Math.min(top, canvasRect.height - el.offsetHeight));
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+});
+document.addEventListener('mouseup', () => {
+  if (!dragState) return;
+  const { el } = dragState;
+  el.classList.remove('dragging');
+  const xmm = parseFloat(el.style.left) / SCALE;
+  const ymm = parseFloat(el.style.top) / SCALE;
+  const key = el.dataset.key;
+  if (key === 'qr'){
+    App.layout.qr.x = round1(xmm); App.layout.qr.y = round1(ymm);
+  } else if (App.layout.texts[key]){
+    App.layout.texts[key].x = round1(xmm); App.layout.texts[key].y = round1(ymm);
+  } else {
+    const st = App.staticTexts.find(s => s.key === key);
+    if (st){ st.x = round1(xmm); st.y = round1(ymm); }
+  }
+  dragState = null;
+});
+function round1(n){ return Math.round(n * 10) / 10; }
+
+function selectField(key){
+  App.selectedFieldKey = key;
+  document.querySelectorAll('#editorCanvas .field').forEach(f => f.classList.toggle('selected', f.dataset.key === key));
+  renderProps();
+}
+
+function renderProps(){
+  const body = document.getElementById('propsBody');
+  const key = App.selectedFieldKey;
+  if (!key){ body.innerHTML = '<p class="empty-note">Clique em um campo na etiqueta para editá-lo.</p>'; return; }
+
+  if (key === 'qr'){
+    const cfg = App.layout.qr;
+    body.innerHTML =
+      '<div class="prop-row"><label>Tamanho do QR Code <span>' + cfg.size + ' mm</span></label>' +
+      '<input type="range" min="10" max="45" step="0.5" value="' + cfg.size + '" oninput="updateQRSize(this.value)"></div>' +
+      '<p class="hint">Este QR é gerado a partir da coluna ' + colLetter(App.codigoColIndex) + '.</p>';
+    return;
+  }
+
+  const isStatic = App.staticTexts.some(s => s.key === key);
+  const cfg = isStatic ? App.staticTexts.find(s => s.key === key) : App.layout.texts[key];
+  if (!cfg){ body.innerHTML = '<p class="empty-note">Clique em um campo na etiqueta para editá-lo.</p>'; return; }
+
+  let html = '';
+  if (isStatic){
+    html += '<div class="prop-row"><label>Texto</label><input type="text" value="' + escapeAttr(cfg.content) + '" oninput="updateStaticContent(\'' + key + '\', this.value)"></div>';
+  } else {
+    html += '<p class="hint" style="margin-top:-6px;">Campo: <strong>' + cfg.label + '</strong> (coluna ' + colLetter(App.textFields.find(f=>f.key===key).colIndex) + ')</p>';
+  }
+  html +=
+    '<div class="prop-row"><label>Fonte</label>' +
+    '<select onchange="updateFontFamily(\'' + key + '\', this.value)">' +
+    FONT_OPTIONS.map(f => '<option value="' + escapeAttr(f.value) + '" style="font-family:' + f.value + ';" ' + ((cfg.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : '') + '>' + f.label + '</option>').join('') +
+    '</select></div>' +
+    '<div class="prop-row"><label>Tamanho da fonte <span>' + cfg.fontSize + ' mm</span></label>' +
+    '<input type="range" min="2" max="14" step="0.5" value="' + cfg.fontSize + '" oninput="updateFontSize(\'' + key + '\', this.value)"></div>' +
+    '<div class="prop-row"><label>Negrito</label>' +
+    '<input type="checkbox" ' + (cfg.bold ? 'checked' : '') + ' onchange="updateBold(\'' + key + '\', this.checked)"></div>' +
+    '<div class="prop-row"><label>Alinhamento</label>' +
+    '<select onchange="updateAlign(\'' + key + '\', this.value)">' +
+    ['left','center','right'].map(a => '<option value="'+a+'" '+(cfg.align===a?'selected':'')+'>'+({left:'Esquerda',center:'Centro',right:'Direita'})[a]+'</option>').join('') +
+    '</select></div>';
+  if (isStatic){
+    html += '<button style="width:100%;color:var(--danger);border-color:var(--danger);" onclick="removeStatic(\'' + key + '\')">Remover texto</button>';
+  }
+  body.innerHTML = html;
+}
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+function updateQRSize(v){
+  App.layout.qr.size = parseFloat(v);
+  const el = document.querySelector('#editorCanvas .field.qr');
+  positionFieldEl(el, App.layout.qr.x, App.layout.qr.y, App.layout.qr.size, App.layout.qr.size);
+  renderProps();
+}
+function getCfg(key){
+  if (App.layout.texts[key]) return App.layout.texts[key];
+  return App.staticTexts.find(s => s.key === key);
+}
+function updateFontFamily(key, v){
+  const cfg = getCfg(key); cfg.fontFamily = v;
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+}
+function updateFontSize(key, v){
+  const cfg = getCfg(key); cfg.fontSize = parseFloat(v);
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+  renderProps();
+}
+function updateBold(key, v){
+  const cfg = getCfg(key); cfg.bold = v;
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+}
+function updateAlign(key, v){
+  const cfg = getCfg(key); cfg.align = v;
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+}
+function updateStaticContent(key, v){
+  const cfg = App.staticTexts.find(s => s.key === key);
+  cfg.content = v;
+  document.querySelector('[data-key="'+key+'"]').textContent = v;
+}
+function removeStatic(key){
+  App.staticTexts = App.staticTexts.filter(s => s.key !== key);
+  App.selectedFieldKey = null;
+  buildEditorCanvas();
+}
+function addStaticText(){
+  App.staticCounter++;
+  const key = 'static' + App.staticCounter;
+  App.staticTexts.push({ key, content: 'Texto', x: 5, y: 45, fontSize: 4, bold: false, align: 'left', fontFamily: FONT_OPTIONS[0].value });
+  buildEditorCanvas();
+  selectField(key);
+}
+function resetLayout(){
+  App.layout = { qr: defaultQR(), texts: {} };
+  App.staticTexts = [];
+  initLayoutDefaults();
+  buildEditorCanvas();
+}
+
+/* ---------------------------------------------------------
+   QR GENERATION
+--------------------------------------------------------- */
+function makeQRDataURL(value){
+  const c = document.createElement('canvas');
+  new QRious({ element: c, value: String(value), size: 400, level: 'M' });
+  return c.toDataURL('image/png');
+}
+
+/* ---------------------------------------------------------
+   STEP 4: OUTPUT
+--------------------------------------------------------- */
+function proceedToOutput(){
+  ['marginTop','marginLeft','gapX','gapY','labelW','labelH'].forEach(k => {
+    const id = 'cfg' + k[0].toUpperCase() + k.slice(1);
+    document.getElementById(id).value = App.page[k];
+  });
+  if (!App.filterInitialized){
+    populateFilterColumnSelect();
+    App.filterInitialized = true;
+  }
+  rebuildOutput();
+  goToStep('output');
+}
+
+/* ---------------------------------------------------------
+   FILTER (choose column + which values get printed)
+--------------------------------------------------------- */
+function populateFilterColumnSelect(){
+  const sel = document.getElementById('filterColSelect');
+  sel.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const headerText = (App.hasHeader && App.aoa[0] && App.aoa[0][c] !== undefined && App.aoa[0][c] !== '') ? String(App.aoa[0][c]) : null;
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = 'Coluna ' + colLetter(c) + (headerText ? ' — ' + headerText : '');
+    sel.appendChild(opt);
+  }
+  // try to default to a column whose header mentions "unidade"
+  let defaultCol = null;
+  if (App.hasHeader && App.aoa[0]){
+    for (let c = 0; c < App.numCols; c++){
+      const h = App.aoa[0][c];
+      if (h && String(h).toLowerCase().includes('unidade')){ defaultCol = c; break; }
+    }
+  }
+  if (defaultCol === null && App.textFields.length){
+    defaultCol = App.textFields[App.textFields.length > 1 ? 1 : 0].colIndex;
+  }
+  if (defaultCol === null) defaultCol = Math.min(1, App.numCols - 1);
+
+  sel.value = defaultCol;
+  App.filter.colIndex = defaultCol;
+  renderFilterChecklist(true);
+}
+
+function onFilterColumnChange(){
+  App.filter.colIndex = parseInt(document.getElementById('filterColSelect').value, 10);
+  renderFilterChecklist(true);
+  rebuildOutput();
+}
+
+function renderFilterChecklist(selectAllDefault){
+  const col = App.filter.colIndex;
+  const values = new Set();
+  App.dataRows.forEach(r => {
+    if (r && r.some(cell => cell !== '' && cell !== undefined)){
+      const v = r[col];
+      values.add(v === undefined ? '' : String(v));
+    }
+  });
+  const sorted = Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+
+  if (selectAllDefault){
+    App.filter.selected = new Set(sorted);
+  } else {
+    App.filter.selected = new Set(Array.from(App.filter.selected).filter(v => values.has(v)));
+  }
+
+  const list = document.getElementById('filterValuesChecklist');
+  list.innerHTML = '';
+  if (!sorted.length){
+    list.innerHTML = '<p class="empty-note">Nenhum valor encontrado nesta coluna.</p>';
+    return;
+  }
+  sorted.forEach(v => {
+    const item = document.createElement('label');
+    item.className = 'checkitem';
+    const checked = App.filter.selected.has(v);
+    item.innerHTML = '<input type="checkbox" value="' + escapeAttr(v) + '" ' + (checked ? 'checked' : '') + ' onchange="toggleFilterValue(this)"> <span>' + (v === '' ? '<em>(vazio)</em>' : v) + '</span>';
+    list.appendChild(item);
+  });
+}
+
+function toggleFilterValue(chk){
+  if (chk.checked) App.filter.selected.add(chk.value);
+  else App.filter.selected.delete(chk.value);
+  rebuildOutput();
+}
+
+function setAllFilterValues(all){
+  document.querySelectorAll('#filterValuesChecklist input[type=checkbox]').forEach(chk => {
+    chk.checked = all;
+    if (all) App.filter.selected.add(chk.value);
+    else App.filter.selected.delete(chk.value);
+  });
+  rebuildOutput();
+}
+
+/* ---------------------------------------------------------
+   INDIVIDUAL SELECTION (choose specific people by name, one by one)
+--------------------------------------------------------- */
+function getNonEmptyRows(){
+  return App.dataRows
+    .map((r, i) => ({ r, i }))
+    .filter(x => x.r.some(cell => cell !== '' && cell !== undefined));
+}
+
+function onIndividualEnabledToggle(){
+  App.individualFilter.enabled = document.getElementById('individualFilterEnabled').checked;
+  document.getElementById('individualFilterBody').style.display = App.individualFilter.enabled ? 'block' : 'none';
+  if (App.individualFilter.enabled && App.individualFilter.colIndex === null){
+    populateIndividualColumnSelect();
+  }
+  rebuildOutput();
+}
+
+function populateIndividualColumnSelect(){
+  const sel = document.getElementById('individualColSelect');
+  sel.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = colLetter(c) + ' — ' + App.columnNames[c];
+    sel.appendChild(opt);
+  }
+  let defaultCol = null;
+  for (let c = 0; c < App.numCols; c++){
+    if (App.columnNames[c] && App.columnNames[c].toLowerCase().includes('atleta')){ defaultCol = c; break; }
+  }
+  if (defaultCol === null && App.textFields.length) defaultCol = App.textFields[0].colIndex;
+  if (defaultCol === null) defaultCol = Math.min(App.numCols - 1, 4);
+
+  sel.value = defaultCol;
+  App.individualFilter.colIndex = defaultCol;
+  renderIndividualChecklist(true);
+}
+
+function onIndividualColumnChange(){
+  App.individualFilter.colIndex = parseInt(document.getElementById('individualColSelect').value, 10);
+  renderIndividualChecklist(true);
+  rebuildOutput();
+}
+
+function renderIndividualChecklist(selectAllDefault){
+  const rows = getNonEmptyRows();
+  App.individualRowsCache = rows;
+  if (selectAllDefault){
+    App.individualFilter.selectedRows = new Set(rows.map(x => x.i));
+  } else {
+    const validIdx = new Set(rows.map(x => x.i));
+    App.individualFilter.selectedRows = new Set(Array.from(App.individualFilter.selectedRows).filter(i => validIdx.has(i)));
+  }
+  const searchBox = document.getElementById('individualSearch');
+  if (searchBox) searchBox.value = '';
+  renderIndividualChecklistDOM('');
+}
+
+function renderIndividualChecklistDOM(searchTerm){
+  const col = App.individualFilter.colIndex;
+  const list = document.getElementById('individualValuesChecklist');
+  list.innerHTML = '';
+  const term = (searchTerm || '').toLowerCase();
+  const rows = App.individualRowsCache || [];
+  let shown = 0;
+
+  rows.forEach(({ r, i }) => {
+    const label = (r[col] !== undefined && r[col] !== '') ? String(r[col]) : ('Linha ' + (i + 1));
+    if (term && !label.toLowerCase().includes(term)) return;
+    shown++;
+
+    const item = document.createElement('label');
+    item.className = 'checkitem';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.row = i;
+    chk.checked = App.individualFilter.selectedRows.has(i);
+    chk.addEventListener('change', () => toggleIndividualRow(chk));
+    const span = document.createElement('span');
+    span.textContent = label;
+    item.appendChild(chk);
+    item.appendChild(span);
+    list.appendChild(item);
+  });
+
+  if (!shown) list.innerHTML = '<p class="empty-note">Nenhum resultado.</p>';
+}
+
+function toggleIndividualRow(chk){
+  const i = parseInt(chk.dataset.row, 10);
+  if (chk.checked) App.individualFilter.selectedRows.add(i);
+  else App.individualFilter.selectedRows.delete(i);
+  rebuildOutput();
+}
+
+function setAllIndividual(all){
+  document.querySelectorAll('#individualValuesChecklist input[type=checkbox]').forEach(chk => {
+    chk.checked = all;
+    const i = parseInt(chk.dataset.row, 10);
+    if (all) App.individualFilter.selectedRows.add(i);
+    else App.individualFilter.selectedRows.delete(i);
+  });
+  rebuildOutput();
+}
+
+function readPageConfig(){
+  App.page.marginTop = parseFloat(document.getElementById('cfgMarginTop').value) || 0;
+  App.page.marginLeft = parseFloat(document.getElementById('cfgMarginLeft').value) || 0;
+  App.page.gapX = parseFloat(document.getElementById('cfgGapX').value) || 0;
+  App.page.gapY = parseFloat(document.getElementById('cfgGapY').value) || 0;
+  App.page.labelW = parseFloat(document.getElementById('cfgLabelW').value) || 99;
+  App.page.labelH = parseFloat(document.getElementById('cfgLabelH').value) || 55.8;
+}
+
+function rebuildOutput(){
+  readPageConfig();
+  const cols = App.page.cols, rows = App.page.rows;
+  const totalW = App.page.marginLeft * 2 + cols * App.page.labelW + (cols - 1) * App.page.gapX;
+  const totalH = App.page.marginTop * 2 + rows * App.page.labelH + (rows - 1) * App.page.gapY;
+  const check = document.getElementById('cfgCheck');
+  const diffW = Math.abs(totalW - 210), diffH = Math.abs(totalH - 297);
+  check.innerHTML = 'Largura total calculada: ' + totalW.toFixed(1) + ' mm (folha A4 = 210 mm) &nbsp;•&nbsp; Altura total calculada: ' + totalH.toFixed(1) + ' mm (folha A4 = 297 mm)' +
+    ((diffW > 2 || diffH > 2) ? ' <span class="warn">— confira as margens, a diferença está acima de 2 mm.</span>' : ' ✓');
+
+  const perPage = cols * rows;
+  let rowsWithIndex = getNonEmptyRows();
+  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined){
+    rowsWithIndex = rowsWithIndex.filter(x => {
+      const v = x.r[App.filter.colIndex];
+      return App.filter.selected.has(v === undefined ? '' : String(v));
+    });
+  }
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
+    rowsWithIndex = rowsWithIndex.filter(x => App.individualFilter.selectedRows.has(x.i));
+  }
+  const rowsData = rowsWithIndex.map(x => x.r);
+  const pageCount = Math.max(1, Math.ceil(rowsData.length / perPage));
+  document.getElementById('pageCountLabel').textContent = rowsData.length + ' etiqueta(s) em ' + pageCount + ' página(s)' + (rowsData.length === 0 ? ' — nenhuma etiqueta corresponde à seleção atual' : '');
+
+  const out = document.getElementById('outputPages');
+  out.innerHTML = '';
+
+  if (!rowsData.length){
+    out.innerHTML = '<p class="empty-note">Nenhuma etiqueta corresponde à seleção atual (filtro por coluna e/ou seleção individual). Ajuste as marcações acima.</p>';
+    return;
+  }
+
+  for (let p = 0; p < pageCount; p++){
+    const pageEl = document.createElement('div');
+    pageEl.className = 'page';
+    pageEl.style.width = '210mm';
+    pageEl.style.height = '297mm';
+
+    const badge = document.createElement('div');
+    badge.className = 'page-badge no-print';
+    badge.textContent = 'Página ' + (p + 1) + ' de ' + pageCount;
+    pageEl.appendChild(badge);
+
+    for (let slot = 0; slot < perPage; slot++){
+      const dataIndex = p * perPage + slot;
+      const rowData = rowsData[dataIndex];
+      const r = Math.floor(slot / cols);
+      const c = slot % cols;
+      const left = App.page.marginLeft + c * (App.page.labelW + App.page.gapX);
+      const top = App.page.marginTop + r * (App.page.labelH + App.page.gapY);
+
+      const slotEl = document.createElement('div');
+      slotEl.className = 'label-slot';
+      slotEl.style.left = left + 'mm';
+      slotEl.style.top = top + 'mm';
+      slotEl.style.width = App.page.labelW + 'mm';
+      slotEl.style.height = App.page.labelH + 'mm';
+
+      if (rowData){
+        // QR
+        const qrImg = document.createElement('img');
+        qrImg.className = 'field';
+        qrImg.style.left = App.layout.qr.x + 'mm';
+        qrImg.style.top = App.layout.qr.y + 'mm';
+        qrImg.style.width = App.layout.qr.size + 'mm';
+        qrImg.style.height = App.layout.qr.size + 'mm';
+        qrImg.src = makeQRDataURL(rowData[App.codigoColIndex] || '');
+        slotEl.appendChild(qrImg);
+
+        // text fields
+        App.textFields.forEach(f => {
+          const cfg = App.layout.texts[f.key];
+          const el = document.createElement('div');
+          el.className = 'field';
+          el.textContent = rowData[f.colIndex] !== undefined ? String(rowData[f.colIndex]) : '';
+          el.style.left = cfg.x + 'mm';
+          el.style.top = cfg.y + 'mm';
+          el.style.fontSize = cfg.fontSize + 'mm';
+          el.style.fontWeight = cfg.bold ? '700' : '400';
+          el.style.textAlign = cfg.align;
+          el.style.fontFamily = cfg.fontFamily || FONT_OPTIONS[0].value;
+          el.style.maxWidth = (App.page.labelW - cfg.x - 2) + 'mm';
+          el.style.whiteSpace = 'normal';
+          slotEl.appendChild(el);
+        });
+
+        // static texts
+        App.staticTexts.forEach(st => {
+          const el = document.createElement('div');
+          el.className = 'field';
+          el.textContent = st.content;
+          el.style.left = st.x + 'mm';
+          el.style.top = st.y + 'mm';
+          el.style.fontSize = st.fontSize + 'mm';
+          el.style.fontWeight = st.bold ? '700' : '400';
+          el.style.textAlign = st.align;
+          el.style.fontFamily = st.fontFamily || FONT_OPTIONS[0].value;
+          slotEl.appendChild(el);
+        });
+      }
+
+      pageEl.appendChild(slotEl);
+    }
+    out.appendChild(pageEl);
+  }
+}
+
+/* ---------------------------------------------------------
+   PRINT (in a new window, to avoid artifact-sandbox print issues)
+--------------------------------------------------------- */
+const PRINT_CSS = `
+  *{box-sizing:border-box;}
+  body{ margin:0; }
+  .page{ position:relative; width:210mm; height:297mm; page-break-after:always; }
+  .page:last-child{ page-break-after:auto; }
+  .label-slot{ position:absolute; overflow:hidden; }
+  .field{ position:absolute; white-space:normal; line-height:1.05; color:#111; }
+  .field img{ display:block; width:100%; height:100%; }
+  .page-badge{ display:none; }
+  @page{ size:A4; margin:0; }
+`;
+
+function printPages(){
+  const status = document.getElementById('exportStatus');
+  const pagesEl = document.getElementById('outputPages');
+  if (!pagesEl.children.length){ status.textContent = 'Gere a pré-visualização primeiro.'; return; }
+
+  const win = window.open('', '_blank');
+  if (!win){
+    status.textContent = 'O navegador bloqueou a janela de impressão. Permita pop-ups para este site, ou use "Salvar como PDF".';
+    return;
+  }
+  win.document.write(
+    '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas</title><style>' + PRINT_CSS + '</style></head><body>' +
+    pagesEl.innerHTML +
+    '</body></html>'
+  );
+  win.document.close();
+  status.textContent = '';
+  const triggerPrint = () => { win.focus(); win.print(); };
+  if (win.document.readyState === 'complete') setTimeout(triggerPrint, 300);
+  else win.addEventListener('load', () => setTimeout(triggerPrint, 300));
+}
+
+/* ---------------------------------------------------------
+   SAVE AS PDF (renders each page to an image, then assembles a PDF)
+--------------------------------------------------------- */
+async function savePDF(){
+  const status = document.getElementById('exportStatus');
+  const pdfBtn = document.getElementById('pdfBtn');
+  const pageEls = document.querySelectorAll('#outputPages .page');
+  if (!pageEls.length){ status.textContent = 'Gere a pré-visualização primeiro.'; return; }
+
+  pdfBtn.disabled = true;
+  try{
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    for (let i = 0; i < pageEls.length; i++){
+      status.textContent = 'Gerando PDF... página ' + (i + 1) + ' de ' + pageEls.length;
+      const pageEl = pageEls[i];
+      const badge = pageEl.querySelector('.page-badge');
+      if (badge) badge.style.visibility = 'hidden';
+      const canvas = await html2canvas(pageEl, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+      if (badge) badge.style.visibility = '';
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+    }
+
+    pdf.save('etiquetas.pdf');
+    status.textContent = '✓ PDF gerado com sucesso.';
+  } catch(err){
+    console.error(err);
+    status.textContent = 'Não foi possível gerar o PDF. Tente novamente.';
+  } finally{
+    pdfBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
