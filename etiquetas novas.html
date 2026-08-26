@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Etiquetas para OMB — Pimaco A4250</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f3f6fb;
+    --panel:#ffffff;
+    --ink:#122036;
+    --muted:#5b6b82;
+    --line:#d9e2ef;
+    --accent:#1d5fd6;
+    --accent-ink:#ffffff;
+    --danger:#c0392b;
+    --focus:#1d5fd6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  header.app-header{
+    padding:20px 28px; border-bottom:1px solid var(--line); background:var(--panel);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  header.app-header h1{ font-size:18px; margin:0; font-weight:700; letter-spacing:-0.01em;}
+  header.app-header .sub{ color:var(--muted); font-size:13px; margin-top:2px;}
+  .steps{ display:flex; gap:6px; font-size:12px; color:var(--muted);}
+  .steps span{ padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
+  .steps span.active{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600;}
+  main{ max-width:1180px; margin:0 auto; padding:28px; }
+  section.step{ display:none; }
+  section.step.active{ display:block; animation: fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:24px; margin-bottom:18px;}
+  .card h2{ margin:0 0 4px; font-size:16px;}
+  .card p.hint{ color:var(--muted); font-size:13px; margin:0 0 16px;}
+  .dropzone{
+    border:2px dashed var(--line); border-radius:12px; padding:44px 20px; text-align:center;
+    cursor:pointer; transition:.15s; background:#fafaf8;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:#eaf1fd; }
+  .dropzone strong{ display:block; margin-bottom:4px; }
+  .dropzone .muted{ color:var(--muted); font-size:13px; }
+  input[type=file]{ display:none; }
+  button{
+    font-family:inherit; font-size:14px; border-radius:9px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); padding:10px 16px; cursor:pointer; transition:.12s;
+  }
+  button:hover{ border-color:var(--accent); color:var(--accent); }
+  button.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+  button.primary:hover{ opacity:.92; color:var(--accent-ink); }
+  button.ghost{ border-color:transparent; background:transparent; color:var(--muted); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  .row-actions{ display:flex; justify-content:space-between; margin-top:18px; gap:10px; flex-wrap:wrap;}
+  table.preview{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:10px; }
+  table.preview th, table.preview td{ border:1px solid var(--line); padding:6px 8px; text-align:left; white-space:nowrap; }
+  table.preview th{ background:#eaf1fd; font-weight:600; position:sticky; top:0; }
+  .table-scroll{ max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  label.field-label{ font-size:13px; font-weight:600; display:block; margin-bottom:6px; }
+  select, input[type=text], input[type=number]{
+    font-family:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid var(--line);
+    background:#fff; color:var(--ink); width:100%;
+  }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .checklist{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .checkitem{ display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; }
+  .checkitem input{ width:auto; }
+  .checkitem .colcode{ font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:5px; padding:1px 6px; }
+  .toggle-row{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-top:10px;}
+
+  /* editor */
+  .editor-wrap{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; }
+  .canvas-holder{ background:#e7edf6; padding:22px; border-radius:12px; }
+  #editorCanvas{
+    position:relative; background:#fff; box-shadow:0 0 0 1px var(--line), 0 6px 18px rgba(0,0,0,.06);
+    background-image:
+      linear-gradient(to right, #eaf0f9 1px, transparent 1px),
+      linear-gradient(to bottom, #eaf0f9 1px, transparent 1px);
+    background-size:16px 16px;
+    overflow:hidden;
+  }
+  .field{
+    position:absolute; cursor:grab; border:1.5px dashed transparent; padding:1px 3px;
+    user-select:none; line-height:1.05; white-space:nowrap; color:#111;
+  }
+  .field:hover{ border-color:#b9c3bd; }
+  .field.selected{ border-color:var(--accent); background:rgba(29,95,214,.08); }
+  .field.qr img{ display:block; width:100%; height:100%; }
+  .field.dragging{ cursor:grabbing; opacity:.85; }
+  .side-panel{ width:280px; flex:0 0 280px; }
+  .prop-row{ margin-bottom:14px; }
+  .prop-row label{ font-size:12.5px; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:4px;}
+  input[type=range]{ width:100%; }
+  .empty-note{ color:var(--muted); font-size:13px; padding:14px; text-align:center; border:1px dashed var(--line); border-radius:10px;}
+  .individual-group-header{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#eaf1fd; border:1px solid #c7dcfa; border-radius:8px;
+    padding:8px 10px; margin:14px 0 6px;
+  }
+  .individual-group-header:first-child{ margin-top:0; }
+  .individual-group-header .g-toggle{ display:flex; align-items:center; gap:8px; cursor:pointer; flex:1 1 auto; min-width:0; }
+  .individual-group-header .g-chevron{ font-size:10px; color:var(--muted); width:10px; flex:0 0 auto; transition:transform .12s; }
+  .individual-group-header .g-title{ font-size:12.5px; font-weight:700; color:var(--ink); text-transform:uppercase; letter-spacing:.03em; }
+  .individual-group-header .g-actions{ display:flex; gap:6px; flex:0 0 auto; }
+  .individual-group-header .g-actions button{ font-size:11px; padding:3px 9px; border-radius:6px; }
+  .field-toolbar{ display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .field-toolbar button{ font-size:12.5px; padding:8px 12px; }
+
+  /* output / print */
+  .zoom-wrap{ background:#e7edf6; border-radius:12px; padding:24px; overflow:auto; max-height:640px; }
+  .page{
+    background:#fff; box-shadow:0 0 0 1px var(--line), 0 8px 20px rgba(0,0,0,.08);
+    position:relative; margin:0 auto 30px; page-break-after:always;
+  }
+  .label-slot{ position:absolute; overflow:hidden; }
+  .label-slot .field{ position:absolute; cursor:default; border:none !important; background:none !important; }
+  .page-badge{ position:absolute; top:-22px; left:0; font-size:11px; color:var(--muted); }
+  .config-note{ font-size:12px; color:var(--muted); margin-top:8px; }
+  .warn{ color:var(--danger); }
+
+  @media print{
+    header.app-header, .no-print, .card > h2, .card > p.hint { display:none !important; }
+    body{ background:#fff; }
+    main{ padding:0; max-width:none; }
+    .card{ border:none; padding:0; box-shadow:none; }
+    .zoom-wrap{ background:none; padding:0; max-height:none; overflow:visible; }
+    .page{ box-shadow:none; margin:0; }
+    @page{ size:A4; margin:0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <h1>Gerador de Etiquetas para OMB</h1>
+    <div class="sub">Planilha → QR Code → Etiquetas Pimaco A4250 / A4350 (2 colunas × 5 linhas, 99 × 55,8 mm)</div>
+  </div>
+  <div class="steps" id="stepsNav">
+    <span data-step="upload" class="active">1. Planilha</span>
+    <span data-step="mapping">2. Colunas</span>
+    <span data-step="editor">3. Diagramação</span>
+    <span data-step="output">4. Gerar &amp; Imprimir</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- STEP 1: UPLOAD -->
+  <section class="step active" id="step-upload">
+    <div class="card" style="padding:14px 20px;">
+      <p class="hint" style="margin:0;">📋 Esta plataforma foi construída para uso com folhas de etiqueta <strong>Pimaco modelo A4250 e A4350</strong> (folha A4, 2 colunas × 5 linhas, etiquetas de 99 × 55,8&nbsp;mm).</p>
+    </div>
+
+    <div class="card" style="background:#eaf1fd; border-color:#c7dcfa;">
+      <h2 style="margin-bottom:8px;">Antes de começar: preencha o modelo de planilha</h2>
+      <p class="hint" style="margin-bottom:16px;">Baixe o arquivo modelo abaixo, preencha com os dados dos atletas (Código, Unidade, Modalidade, Atleta, Cargo) e, em seguida, envie esse mesmo arquivo preenchido no campo logo abaixo.</p>
+      <a id="templateDownloadLink" href="#" download="Modelo_Listagem_Geral_Credenciamento.xlsx" style="display:inline-flex; align-items:center; gap:8px; text-decoration:none; background:var(--accent); color:var(--accent-ink); font-weight:600; font-size:14px; padding:10px 18px; border-radius:9px;">⬇️ Baixar modelo de planilha (.xlsx)</a>
+    </div>
+
+    <div class="card">
+      <h2>1. Envie a planilha preenchida</h2>
+      <p class="hint">Aceita .xlsx ou .xls. Os dados serão lidos direto pelas letras das colunas (A, B, C…), como na sua planilha.</p>
+      <div class="dropzone" id="dropzone">
+        <strong>Clique para escolher o arquivo</strong>
+        <div class="muted">ou arraste o .xlsx aqui</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+      </div>
+      <div id="uploadStatus" class="config-note"></div>
+    </div>
+
+    <div class="card" id="sheetPicker" style="display:none;">
+      <h2>Escolha a planilha (aba)</h2>
+      <p class="hint">Este arquivo tem mais de uma planilha. Selecione qual delas contém os dados a usar.</p>
+      <div class="grid2">
+        <div>
+          <label class="field-label">Planilha</label>
+          <select id="sheetSelect"></select>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="primary" style="width:100%;" onclick="loadSelectedSheet()">Usar esta planilha →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 2: MAPPING -->
+  <section class="step" id="step-mapping">
+    <div class="card">
+      <h2>2. Confira os dados e escolha as colunas</h2>
+      <p class="hint">Pré-visualização da planilha (linhas e colunas reais). Marque se a primeira linha é cabeçalho.</p>
+      <label class="toggle-row"><input type="checkbox" id="hasHeaderToggle" checked> A primeira linha contém os títulos das colunas (cabeçalho)</label>
+      <div class="table-scroll" style="margin-top:12px;">
+        <table class="preview" id="previewTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Nomeie as colunas</h2>
+      <p class="hint">Use o nome de cabeçalho detectado ou digite um nome para identificar colunas sem cabeçalho (ex.: "Unidade", "Atleta").</p>
+      <div id="columnNamesRow" style="display:flex; gap:12px; overflow-x:auto; padding-bottom:6px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="grid2">
+        <div>
+          <label class="field-label">Coluna que será convertida em QR Code (código)</label>
+          <select id="codigoColSelect"></select>
+          <p class="hint" style="margin-top:8px;">Esta coluna não aparecerá como texto na etiqueta — apenas o QR code será gerado a partir dela.</p>
+        </div>
+        <div>
+          <label class="field-label">Colunas que devem aparecer como texto na etiqueta</label>
+          <div class="checklist" id="fieldChecklist"></div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost" onclick="goToStep('upload')">← Voltar</button>
+        <button class="primary" id="toEditorBtn" onclick="proceedToEditor()">Continuar para diagramação →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3: EDITOR -->
+  <section class="step" id="step-editor">
+    <div class="card">
+      <h2>3. Diagrame a etiqueta</h2>
+      <p class="hint">Arraste o QR code e os campos de texto para a posição que preferir dentro da etiqueta (99 × 55,8&nbsp;mm). Clique em um campo para ajustar tamanho da fonte, negrito e alinhamento. Os valores mostrados são apenas um exemplo (primeira linha da planilha).</p>
+      <div class="editor-wrap">
+        <div class="canvas-holder">
+          <div id="editorCanvas"></div>
+          <div class="field-toolbar no-print">
+            <button onclick="addStaticText()">+ Texto fixo</button>
+            <button onclick="resetLayout()">Restaurar layout padrão</button>
+          </div>
+        </div>
+        <div class="side-panel">
+          <div class="card" id="propsCard" style="padding:16px;">
+            <h2 style="font-size:14px;">Propriedades</h2>
+            <div id="propsBody"><p class="empty-note">Clique em um campo na etiqueta para editá-lo.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="ghost" onclick="goToStep('mapping')">← Voltar</button>
+        <button class="primary" onclick="proceedToOutput()">Gerar etiquetas →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 4: OUTPUT -->
+  <section class="step" id="step-output">
+    <div class="card no-print">
+      <h2>Filtrar o que será impresso</h2>
+      <p class="hint">Escolha a coluna (por exemplo, Unidade) e marque quais valores devem entrar na impressão. Desmarque o que não deseja imprimir.</p>
+      <div class="grid2">
+        <div>
+          <label class="field-label">Coluna para filtrar</label>
+          <select id="filterColSelect" onchange="onFilterColumnChange()"></select>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="field-label" style="margin-bottom:0;">Valores a imprimir</label>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllFilterValues(true)">Selecionar todos</button>
+              <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllFilterValues(false)">Limpar</button>
+            </div>
+          </div>
+          <div class="checklist" id="filterValuesChecklist" style="max-height:190px; overflow:auto; margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <hr style="border:none; border-top:1px solid var(--line); margin:22px 0;">
+
+      <h2>Selecionar etiquetas individualmente</h2>
+      <p class="hint">Ative para escolher, uma a uma, quais pessoas (dentre as que já passaram pelo filtro acima) devem ter etiqueta impressa — útil para reimprimir só alguns nomes.</p>
+      <label class="toggle-row"><input type="checkbox" id="individualFilterEnabled" onchange="onIndividualEnabledToggle()"> Selecionar etiquetas individualmente por nome</label>
+      <div id="individualFilterBody" style="display:none; margin-top:14px;">
+        <div class="grid2">
+          <div>
+            <label class="field-label">Coluna com o nome</label>
+            <select id="individualColSelect" onchange="onIndividualColumnChange()"></select>
+            <label class="field-label" style="margin-top:14px;">Buscar</label>
+            <input type="text" id="individualSearch" placeholder="Digite para filtrar a lista..." oninput="renderIndividualChecklistDOM(this.value)">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <label class="field-label" style="margin-bottom:0;">Etiquetas selecionadas</label>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllIndividual(true)">Selecionar todos</button>
+                <button type="button" class="ghost" style="padding:4px 8px;font-size:12px;" onclick="setAllIndividual(false)">Limpar</button>
+              </div>
+            </div>
+            <div class="checklist" id="individualValuesChecklist" style="max-height:220px; overflow:auto; margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card no-print">
+      <h2>Ajuste fino da folha e impressão</h2>
+      <p class="hint">Valores padrão calculados para a folha Pimaco A4250 (A4, 2 colunas × 5 linhas, etiqueta 99 × 55,8&nbsp;mm). Imprima primeiro em papel comum e confira contra a folha de etiquetas antes de usar o adesivo — ajuste os valores abaixo se necessário.</p>
+      <div class="grid3">
+        <div>
+          <label class="field-label">Margem superior (mm)</label>
+          <input type="number" id="cfgMarginTop" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Margem esquerda (mm)</label>
+          <input type="number" id="cfgMarginLeft" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Espaçamento horizontal entre colunas (mm)</label>
+          <input type="number" id="cfgGapX" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Espaçamento vertical entre linhas (mm)</label>
+          <input type="number" id="cfgGapY" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Largura da etiqueta (mm)</label>
+          <input type="number" id="cfgLabelW" step="0.1">
+        </div>
+        <div>
+          <label class="field-label">Altura da etiqueta (mm)</label>
+          <input type="number" id="cfgLabelH" step="0.1">
+        </div>
+      </div>
+      <div class="config-note" id="cfgCheck"></div>
+      <div class="row-actions">
+        <button onclick="rebuildOutput()">Atualizar pré-visualização</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span id="exportStatus" class="config-note" style="margin:0;"></span>
+          <button class="ghost" onclick="goToStep('editor')">← Voltar à diagramação</button>
+          <button id="pdfBtn" onclick="savePDF()">⬇️ Salvar como PDF</button>
+          <button class="primary" id="printBtn" onclick="printPages()">🖨️ Imprimir</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="no-print">Pré-visualização (<span id="pageCountLabel"></span>)</h2>
+      <div class="zoom-wrap" id="outputPages"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* ---------------------------------------------------------
+   STATE
+--------------------------------------------------------- */
+const TEMPLATE_XLSX_B64 = "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";
+const TEMPLATE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+const App = {
+  workbook: null,        // parsed XLSX workbook (all sheets)
+  currentSheetName: null,
+  aoa: [],              // array of arrays from the selected sheet
+  hasHeader: true,
+  dataRows: [],         // rows actually used (after header removed)
+  numCols: 0,
+  columnNames: [],       // editable display name per column index
+  manualColumnNames: new Set(), // columns the user manually renamed
+  codigoColIndex: 0,    // 0-based column index used for QR
+  textFields: [],       // [{colIndex, label}]
+  layout: {             // editor field layout, values in mm
+    qr: { x: 71, y: 27.8, size: 25 },
+    texts: {}           // key: fieldKey -> {x,y,fontSize,bold,align,label}
+  },
+  staticTexts: [],      // [{key, content, x,y,fontSize,bold,align}]
+  page: { marginTop: 9, marginLeft: 6, gapX: 0, gapY: 0, labelW: 99, labelH: 55.8, cols: 2, rows: 5 },
+  filter: { colIndex: null, selected: new Set() },
+  filterInitialized: false,
+  individualFilter: { enabled: false, colIndex: null, selectedRows: new Set() },
+  individualCollapsedGroups: new Set(),
+  selectedFieldKey: null,
+  staticCounter: 0
+};
+
+const SCALE = 4; // px per mm in the editor canvas
+
+// Default QR position/size: bottom-right corner, small margin from the label edge
+function defaultQR(){
+  return { x: 68.5, y: 25.3, size: 25 };
+}
+
+const FONT_OPTIONS = [
+  { value: "Arial, Helvetica, sans-serif", label: "Arial" },
+  { value: "'Times New Roman', Times, serif", label: "Times New Roman" },
+  { value: "Georgia, serif", label: "Georgia" },
+  { value: "'Courier New', Courier, monospace", label: "Courier New" },
+  { value: "Verdana, Geneva, sans-serif", label: "Verdana" },
+  { value: "'Trebuchet MS', sans-serif", label: "Trebuchet MS" },
+  { value: "'Segoe UI', sans-serif", label: "Segoe UI" },
+  { value: "Impact, 'Arial Black', sans-serif", label: "Impact" },
+  { value: "'Comic Sans MS', cursive", label: "Comic Sans MS" }
+];
+
+function colLetter(index){
+  let s = '';
+  index = index + 1;
+  while (index > 0){
+    const rem = (index - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    index = Math.floor((index - 1) / 26);
+  }
+  return s;
+}
+
+/* ---------------------------------------------------------
+   NAVIGATION
+--------------------------------------------------------- */
+function goToStep(name){
+  document.querySelectorAll('section.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + name).classList.add('active');
+  document.querySelectorAll('#stepsNav span').forEach(s => s.classList.toggle('active', s.dataset.step === name));
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ---------------------------------------------------------
+   STEP 1: UPLOAD
+--------------------------------------------------------- */
+const dropzone = document.getElementById('dropzone');
+document.getElementById('templateDownloadLink').href = 'data:' + TEMPLATE_MIME + ';base64,' + TEMPLATE_XLSX_B64;
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file){
+  const status = document.getElementById('uploadStatus');
+  status.textContent = 'Lendo ' + file.name + '...';
+  document.getElementById('sheetPicker').style.display = 'none';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      if (!wb.SheetNames.length){ status.textContent = 'Nenhuma planilha encontrada neste arquivo.'; return; }
+      App.workbook = wb;
+      status.textContent = '✓ ' + file.name + ' carregado.';
+      if (wb.SheetNames.length === 1){
+        selectSheet(wb.SheetNames[0]);
+      } else {
+        showSheetPicker(wb.SheetNames);
+      }
+    } catch(err){
+      status.textContent = 'Não foi possível ler o arquivo. Confirme se é um .xlsx ou .xls válido.';
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showSheetPicker(names){
+  const sel = document.getElementById('sheetSelect');
+  sel.innerHTML = '';
+  names.forEach(name => {
+    let rowCount = 0;
+    try{ rowCount = XLSX.utils.sheet_to_json(App.workbook.Sheets[name], { header: 1, defval: '' }).length; } catch(e){}
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + ' (' + rowCount + (rowCount === 1 ? ' linha' : ' linhas') + ')';
+    sel.appendChild(opt);
+  });
+  document.getElementById('sheetPicker').style.display = 'block';
+}
+
+function loadSelectedSheet(){
+  const name = document.getElementById('sheetSelect').value;
+  selectSheet(name);
+}
+
+function selectSheet(name){
+  const status = document.getElementById('uploadStatus');
+  const sheet = App.workbook.Sheets[name];
+  const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!aoa.length){ status.textContent = 'A planilha "' + name + '" está vazia.'; return; }
+
+  App.aoa = aoa;
+  App.numCols = aoa.reduce((m, r) => Math.max(m, r.length), 0);
+  App.currentSheetName = name;
+
+  // reset mapping/layout state, since columns may differ between sheets
+  App.columnNames = [];
+  App.manualColumnNames = new Set();
+  App.codigoColIndex = 0;
+  App.textFields = [];
+  App.layout = { qr: defaultQR(), texts: {} };
+  App.staticTexts = [];
+  App.filter = { colIndex: null, selected: new Set() };
+  App.filterInitialized = false;
+  App.individualFilter = { enabled: false, colIndex: null, selectedRows: new Set() };
+  App.individualCollapsedGroups = new Set();
+
+  status.textContent = '✓ Usando a planilha "' + name + '" — ' + aoa.length + ' linha(s) encontrada(s).';
+  buildMappingStep();
+  goToStep('mapping');
+}
+
+/* ---------------------------------------------------------
+   STEP 2: MAPPING
+--------------------------------------------------------- */
+function buildMappingStep(){
+  document.getElementById('hasHeaderToggle').onchange = renderPreviewAndSelectors;
+  renderPreviewAndSelectors();
+}
+
+function renderPreviewAndSelectors(){
+  App.hasHeader = document.getElementById('hasHeaderToggle').checked;
+  App.dataRows = App.hasHeader ? App.aoa.slice(1) : App.aoa.slice(0);
+
+  // preview table (show up to 8 rows)
+  const table = document.getElementById('previewTable');
+  const previewRows = App.aoa.slice(0, 9);
+  let html = '<thead><tr><th>#</th>';
+  for (let c = 0; c < App.numCols; c++) html += '<th>' + colLetter(c) + '</th>';
+  html += '</tr></thead><tbody>';
+  previewRows.forEach((row, i) => {
+    const isHeaderRow = App.hasHeader && i === 0;
+    html += '<tr' + (isHeaderRow ? ' style="background:#eaf1fd;font-weight:600;"' : '') + '><td>' + (isHeaderRow ? 'Cabeçalho' : (i + (App.hasHeader?0:1))) + '</td>';
+    for (let c = 0; c < App.numCols; c++){
+      html += '<td>' + (row[c] !== undefined && row[c] !== '' ? String(row[c]) : '<span style="color:#bbb">—</span>') + '</td>';
+    }
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  initColumnNames(true);
+  renderColumnNameInputs();
+  renderSelectors();
+}
+
+// builds/refreshes App.columnNames from detected headers, keeping any manual edits
+function initColumnNames(preserveManual){
+  const prev = App.columnNames || [];
+  const next = [];
+  for (let c = 0; c < App.numCols; c++){
+    if (preserveManual && App.manualColumnNames.has(c) && prev[c] !== undefined){
+      next[c] = prev[c];
+      continue;
+    }
+    const headerText = (App.hasHeader && App.aoa[0] && App.aoa[0][c] !== undefined && App.aoa[0][c] !== '') ? String(App.aoa[0][c]) : '';
+    next[c] = headerText || ('Coluna ' + colLetter(c));
+  }
+  App.columnNames = next;
+}
+
+function renderColumnNameInputs(){
+  const wrap = document.getElementById('columnNamesRow');
+  wrap.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const item = document.createElement('div');
+    item.style.minWidth = '140px';
+    const badge = document.createElement('div');
+    badge.className = 'colcode';
+    badge.style.display = 'inline-block';
+    badge.style.marginBottom = '4px';
+    badge.textContent = colLetter(c);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = App.columnNames[c] || '';
+    input.placeholder = 'Coluna ' + colLetter(c);
+    input.addEventListener('input', () => updateColumnName(c, input.value));
+    item.appendChild(badge);
+    item.appendChild(input);
+    wrap.appendChild(item);
+  }
+}
+
+function updateColumnName(c, v){
+  App.columnNames[c] = v;
+  App.manualColumnNames.add(c);
+  renderSelectors();
+}
+
+// (re)builds the "código" select and the text-fields checklist from App.columnNames,
+// preserving whatever the user already picked/checked
+function renderSelectors(){
+  const codigoSelect = document.getElementById('codigoColSelect');
+  const prevCodigo = codigoSelect.value;
+  const prevChecked = {};
+  document.querySelectorAll('#fieldChecklist input[type=checkbox]').forEach(chk => {
+    prevChecked[chk.dataset.col] = chk.checked;
+  });
+
+  codigoSelect.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = colLetter(c) + ' — ' + (App.columnNames[c] || ('Coluna ' + colLetter(c)));
+    codigoSelect.appendChild(opt);
+  }
+  const prevCodigoNum = parseInt(prevCodigo, 10);
+  codigoSelect.value = (!isNaN(prevCodigoNum) && prevCodigoNum < App.numCols) ? prevCodigoNum : (App.codigoColIndex || 0);
+
+  const checklist = document.getElementById('fieldChecklist');
+  checklist.innerHTML = '';
+  const defaultChecked = new Set([1, 2, 4, 5]); // B, C, E, F by default, per the request
+  for (let c = 0; c < App.numCols; c++){
+    const item = document.createElement('label');
+    item.className = 'checkitem';
+    let checked;
+    if (Object.prototype.hasOwnProperty.call(prevChecked, String(c))) checked = prevChecked[c];
+    else if (App.textFields.length) checked = App.textFields.some(f => f.colIndex === c);
+    else checked = defaultChecked.has(c);
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.col = c;
+    chk.checked = checked;
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'colcode';
+    codeSpan.textContent = colLetter(c);
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = App.columnNames[c] || ('Coluna ' + colLetter(c));
+
+    item.appendChild(chk);
+    item.appendChild(codeSpan);
+    item.appendChild(nameSpan);
+    checklist.appendChild(item);
+  }
+}
+
+function collectMapping(){
+  App.codigoColIndex = parseInt(document.getElementById('codigoColSelect').value, 10);
+  const checks = document.querySelectorAll('#fieldChecklist input[type=checkbox]');
+  const fields = [];
+  checks.forEach(chk => {
+    if (chk.checked){
+      const c = parseInt(chk.dataset.col, 10);
+      if (c === App.codigoColIndex) return; // never duplicate the QR column as text
+      const label = (App.columnNames[c] && App.columnNames[c].trim()) ? App.columnNames[c] : ('Coluna ' + colLetter(c));
+      fields.push({ colIndex: c, label, key: 'col' + c });
+    }
+  });
+  App.textFields = fields;
+}
+
+/* ---------------------------------------------------------
+   STEP 3: EDITOR
+--------------------------------------------------------- */
+function proceedToEditor(){
+  collectMapping();
+  if (!App.textFields.length && App.dataRows.length === 0){
+    alert('A planilha não tem linhas de dados.');
+    return;
+  }
+  initLayoutDefaults();
+  buildEditorCanvas();
+  goToStep('editor');
+}
+
+function normalizeText(s){
+  return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function initLayoutDefaults(){
+  // only set defaults for fields that don't already have a layout (keeps user edits on Back/Forward)
+  if (!App.layout.qr) App.layout.qr = defaultQR();
+
+  const marginX = 6;
+
+  const findField = (name) => App.textFields.find(f => normalizeText(f.label) === name);
+  const fAtleta = findField('atleta');
+  const fUnidade = findField('unidade');
+  const fModalidade = findField('modalidade');
+  const fCargo = findField('cargo');
+  const knownKeys = new Set([fAtleta, fUnidade, fModalidade, fCargo].filter(Boolean).map(f => f.key));
+
+  // 1) Atleta — 4.5mm, negrito
+  if (fAtleta){
+    if (!App.layout.texts[fAtleta.key]){
+      App.layout.texts[fAtleta.key] = { x: marginX - 3, y: 7, fontSize: 4.5, bold: true, align: 'left', label: fAtleta.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fAtleta.key].label = fAtleta.label;
+    }
+  }
+
+  // 2) legenda fixa "UNIDADE" — 3mm, negrito — seguida do valor da Unidade — 3mm, sem negrito
+  if (fUnidade){
+    const capKey = 'autoCaption_unidade';
+    if (!App.staticTexts.some(s => s.key === capKey)){
+      App.staticTexts.push({ key: capKey, content: 'UNIDADE', x: marginX, y: 23, fontSize: 3, bold: true, align: 'left', fontFamily: FONT_OPTIONS[0].value, auto: true });
+    }
+    if (!App.layout.texts[fUnidade.key]){
+      App.layout.texts[fUnidade.key] = { x: marginX, y: 28, fontSize: 3, bold: false, align: 'left', label: fUnidade.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fUnidade.key].label = fUnidade.label;
+    }
+  }
+
+  // 3) Modalidade — 3mm, sem negrito
+  if (fModalidade){
+    if (!App.layout.texts[fModalidade.key]){
+      App.layout.texts[fModalidade.key] = { x: marginX, y: 40, fontSize: 3, bold: false, align: 'left', label: fModalidade.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fModalidade.key].label = fModalidade.label;
+    }
+  }
+
+  // 4) Cargo — 3mm, sem negrito
+  if (fCargo){
+    if (!App.layout.texts[fCargo.key]){
+      App.layout.texts[fCargo.key] = { x: marginX, y: 46, fontSize: 3, bold: false, align: 'left', label: fCargo.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fCargo.key].label = fCargo.label;
+    }
+  }
+
+  // any other selected column that isn't Atleta/Unidade/Modalidade/Cargo: stack it below, generic style
+  let cursorY = 52;
+  App.textFields.forEach(f => {
+    if (knownKeys.has(f.key)) return;
+    if (!App.layout.texts[f.key]){
+      App.layout.texts[f.key] = { x: marginX, y: cursorY, fontSize: 3.5, bold: false, align: 'left', label: f.label, fontFamily: FONT_OPTIONS[0].value };
+      cursorY += 8;
+    } else {
+      App.layout.texts[f.key].label = f.label;
+    }
+  });
+}
+
+function buildEditorCanvas(){
+  const canvas = document.getElementById('editorCanvas');
+  canvas.style.width = (App.page.labelW * SCALE) + 'px';
+  canvas.style.height = (App.page.labelH * SCALE) + 'px';
+  canvas.innerHTML = '';
+  App.selectedFieldKey = null;
+  renderProps();
+
+  // QR field
+  const qrEl = document.createElement('div');
+  qrEl.className = 'field qr';
+  qrEl.dataset.key = 'qr';
+  positionFieldEl(qrEl, App.layout.qr.x, App.layout.qr.y, App.layout.qr.size, App.layout.qr.size);
+  const img = document.createElement('img');
+  img.src = makeQRDataURL(sampleValue(App.codigoColIndex) || '000000');
+  qrEl.appendChild(img);
+  canvas.appendChild(qrEl);
+  makeDraggable(qrEl);
+  qrEl.addEventListener('click', () => selectField('qr'));
+
+  // text fields
+  App.textFields.forEach(f => {
+    const cfg = App.layout.texts[f.key];
+    const el = document.createElement('div');
+    el.className = 'field text';
+    el.dataset.key = f.key;
+    el.textContent = String(sampleValue(f.colIndex) || f.label);
+    applyTextStyle(el, cfg);
+    positionFieldEl(el, cfg.x, cfg.y, null, null);
+    canvas.appendChild(el);
+    makeDraggable(el);
+    el.addEventListener('click', () => selectField(f.key));
+  });
+
+  // static texts
+  App.staticTexts.forEach(st => {
+    const el = document.createElement('div');
+    el.className = 'field text static';
+    el.dataset.key = st.key;
+    el.textContent = st.content;
+    applyTextStyle(el, st);
+    positionFieldEl(el, st.x, st.y, null, null);
+    canvas.appendChild(el);
+    makeDraggable(el);
+    el.addEventListener('click', () => selectField(st.key));
+  });
+}
+
+function sampleValue(colIndex){
+  if (!App.dataRows.length) return '';
+  const row = App.dataRows[0];
+  return row ? row[colIndex] : '';
+}
+
+function positionFieldEl(el, xmm, ymm, wmm, hmm){
+  el.style.left = (xmm * SCALE) + 'px';
+  el.style.top = (ymm * SCALE) + 'px';
+  if (wmm) el.style.width = (wmm * SCALE) + 'px';
+  if (hmm) el.style.height = (hmm * SCALE) + 'px';
+}
+
+function applyTextStyle(el, cfg){
+  el.style.fontSize = (cfg.fontSize * SCALE) + 'px';
+  el.style.fontWeight = cfg.bold ? '700' : '400';
+  el.style.textAlign = cfg.align || 'left';
+  el.style.fontFamily = cfg.fontFamily || FONT_OPTIONS[0].value;
+}
+
+let dragState = null;
+function makeDraggable(el){
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    selectField(el.dataset.key);
+    const canvas = document.getElementById('editorCanvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    dragState = {
+      el,
+      offsetX: e.clientX - elRect.left,
+      offsetY: e.clientY - elRect.top,
+      canvasRect
+    };
+    el.classList.add('dragging');
+  });
+}
+document.addEventListener('mousemove', (e) => {
+  if (!dragState) return;
+  const { el, offsetX, offsetY, canvasRect } = dragState;
+  let left = e.clientX - canvasRect.left - offsetX;
+  let top = e.clientY - canvasRect.top - offsetY;
+  left = Math.max(0, Math.min(left, canvasRect.width - el.offsetWidth));
+  top = Math.max(0, Math.min(top, canvasRect.height - el.offsetHeight));
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+});
+document.addEventListener('mouseup', () => {
+  if (!dragState) return;
+  const { el } = dragState;
+  el.classList.remove('dragging');
+  const xmm = parseFloat(el.style.left) / SCALE;
+  const ymm = parseFloat(el.style.top) / SCALE;
+  const key = el.dataset.key;
+  if (key === 'qr'){
+    App.layout.qr.x = round1(xmm); App.layout.qr.y = round1(ymm);
+  } else if (App.layout.texts[key]){
+    App.layout.texts[key].x = round1(xmm); App.layout.texts[key].y = round1(ymm);
+  } else {
+    const st = App.staticTexts.find(s => s.key === key);
+    if (st){ st.x = round1(xmm); st.y = round1(ymm); }
+  }
+  dragState = null;
+});
+function round1(n){ return Math.round(n * 10) / 10; }
+
+function selectField(key){
+  App.selectedFieldKey = key;
+  document.querySelectorAll('#editorCanvas .field').forEach(f => f.classList.toggle('selected', f.dataset.key === key));
+  renderProps();
+}
+
+function renderProps(){
+  const body = document.getElementById('propsBody');
+  const key = App.selectedFieldKey;
+  if (!key){ body.innerHTML = '<p class="empty-note">Clique em um campo na etiqueta para editá-lo.</p>'; return; }
+
+  if (key === 'qr'){
+    const cfg = App.layout.qr;
+    body.innerHTML =
+      '<div class="prop-row"><label>Tamanho do QR Code <span>' + cfg.size + ' mm</span></label>' +
+      '<input type="range" min="10" max="45" step="0.5" value="' + cfg.size + '" oninput="updateQRSize(this.value)"></div>' +
+      '<p class="hint">Este QR é gerado a partir da coluna ' + colLetter(App.codigoColIndex) + '.</p>';
+    return;
+  }
+
+  const isStatic = App.staticTexts.some(s => s.key === key);
+  const cfg = isStatic ? App.staticTexts.find(s => s.key === key) : App.layout.texts[key];
+  if (!cfg){ body.innerHTML = '<p class="empty-note">Clique em um campo na etiqueta para editá-lo.</p>'; return; }
+
+  let html = '';
+  if (isStatic){
+    html += '<div class="prop-row"><label>Texto</label><input type="text" value="' + escapeAttr(cfg.content) + '" oninput="updateStaticContent(\'' + key + '\', this.value)"></div>';
+  } else {
+    html += '<p class="hint" style="margin-top:-6px;">Campo: <strong>' + cfg.label + '</strong> (coluna ' + colLetter(App.textFields.find(f=>f.key===key).colIndex) + ')</p>';
+  }
+  html +=
+    '<div class="prop-row"><label>Fonte</label>' +
+    '<select onchange="updateFontFamily(\'' + key + '\', this.value)">' +
+    FONT_OPTIONS.map(f => '<option value="' + escapeAttr(f.value) + '" style="font-family:' + f.value + ';" ' + ((cfg.fontFamily || FONT_OPTIONS[0].value) === f.value ? 'selected' : '') + '>' + f.label + '</option>').join('') +
+    '</select></div>' +
+    '<div class="prop-row"><label>Tamanho da fonte <span>' + cfg.fontSize + ' mm</span></label>' +
+    '<input type="range" min="2" max="14" step="0.5" value="' + cfg.fontSize + '" oninput="updateFontSize(\'' + key + '\', this.value)"></div>' +
+    '<div class="prop-row"><label>Negrito</label>' +
+    '<input type="checkbox" ' + (cfg.bold ? 'checked' : '') + ' onchange="updateBold(\'' + key + '\', this.checked)"></div>' +
+    '<div class="prop-row"><label>Alinhamento</label>' +
+    '<select onchange="updateAlign(\'' + key + '\', this.value)">' +
+    ['left','center','right'].map(a => '<option value="'+a+'" '+(cfg.align===a?'selected':'')+'>'+({left:'Esquerda',center:'Centro',right:'Direita'})[a]+'</option>').join('') +
+    '</select></div>';
+  if (isStatic){
+    html += '<button style="width:100%;color:var(--danger);border-color:var(--danger);" onclick="removeStatic(\'' + key + '\')">Remover texto</button>';
+  }
+  body.innerHTML = html;
+}
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+function updateQRSize(v){
+  App.layout.qr.size = parseFloat(v);
+  const el = document.querySelector('#editorCanvas .field.qr');
+  positionFieldEl(el, App.layout.qr.x, App.layout.qr.y, App.layout.qr.size, App.layout.qr.size);
+  renderProps();
+}
+function getCfg(key){
+  if (App.layout.texts[key]) return App.layout.texts[key];
+  return App.staticTexts.find(s => s.key === key);
+}
+function updateFontFamily(key, v){
+  const cfg = getCfg(key); cfg.fontFamily = v;
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+}
+function updateFontSize(key, v){
+  const cfg = getCfg(key); cfg.fontSize = parseFloat(v);
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+  renderProps();
+}
+function updateBold(key, v){
+  const cfg = getCfg(key); cfg.bold = v;
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+}
+function updateAlign(key, v){
+  const cfg = getCfg(key); cfg.align = v;
+  applyTextStyle(document.querySelector('[data-key="'+key+'"]'), cfg);
+}
+function updateStaticContent(key, v){
+  const cfg = App.staticTexts.find(s => s.key === key);
+  cfg.content = v;
+  document.querySelector('[data-key="'+key+'"]').textContent = v;
+}
+function removeStatic(key){
+  App.staticTexts = App.staticTexts.filter(s => s.key !== key);
+  App.selectedFieldKey = null;
+  buildEditorCanvas();
+}
+function addStaticText(){
+  App.staticCounter++;
+  const key = 'static' + App.staticCounter;
+  App.staticTexts.push({ key, content: 'Texto', x: 5, y: 45, fontSize: 4, bold: false, align: 'left', fontFamily: FONT_OPTIONS[0].value });
+  buildEditorCanvas();
+  selectField(key);
+}
+function resetLayout(){
+  App.layout = { qr: defaultQR(), texts: {} };
+  App.staticTexts = [];
+  initLayoutDefaults();
+  buildEditorCanvas();
+}
+
+/* ---------------------------------------------------------
+   QR GENERATION
+--------------------------------------------------------- */
+function makeQRDataURL(value){
+  const c = document.createElement('canvas');
+  new QRious({ element: c, value: String(value), size: 400, level: 'M' });
+  return c.toDataURL('image/png');
+}
+
+/* ---------------------------------------------------------
+   STEP 4: OUTPUT
+--------------------------------------------------------- */
+function proceedToOutput(){
+  ['marginTop','marginLeft','gapX','gapY','labelW','labelH'].forEach(k => {
+    const id = 'cfg' + k[0].toUpperCase() + k.slice(1);
+    document.getElementById(id).value = App.page[k];
+  });
+  if (!App.filterInitialized){
+    populateFilterColumnSelect();
+    App.filterInitialized = true;
+  }
+  rebuildOutput();
+  goToStep('output');
+}
+
+/* ---------------------------------------------------------
+   FILTER (choose column + which values get printed)
+--------------------------------------------------------- */
+function populateFilterColumnSelect(){
+  const sel = document.getElementById('filterColSelect');
+  sel.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const headerText = (App.hasHeader && App.aoa[0] && App.aoa[0][c] !== undefined && App.aoa[0][c] !== '') ? String(App.aoa[0][c]) : null;
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = 'Coluna ' + colLetter(c) + (headerText ? ' — ' + headerText : '');
+    sel.appendChild(opt);
+  }
+  // try to default to a column whose header mentions "unidade"
+  let defaultCol = null;
+  if (App.hasHeader && App.aoa[0]){
+    for (let c = 0; c < App.numCols; c++){
+      const h = App.aoa[0][c];
+      if (h && String(h).toLowerCase().includes('unidade')){ defaultCol = c; break; }
+    }
+  }
+  if (defaultCol === null && App.textFields.length){
+    defaultCol = App.textFields[App.textFields.length > 1 ? 1 : 0].colIndex;
+  }
+  if (defaultCol === null) defaultCol = Math.min(1, App.numCols - 1);
+
+  sel.value = defaultCol;
+  App.filter.colIndex = defaultCol;
+  renderFilterChecklist(true);
+}
+
+function onFilterColumnChange(){
+  App.filter.colIndex = parseInt(document.getElementById('filterColSelect').value, 10);
+  App.individualCollapsedGroups = new Set();
+  renderFilterChecklist(true);
+  refreshIndividualAfterFilterChange();
+  rebuildOutput();
+}
+
+function renderFilterChecklist(selectAllDefault){
+  const col = App.filter.colIndex;
+  const values = new Set();
+  App.dataRows.forEach(r => {
+    if (r && r.some(cell => cell !== '' && cell !== undefined)){
+      const v = r[col];
+      values.add(v === undefined ? '' : String(v));
+    }
+  });
+  const sorted = Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+
+  if (selectAllDefault){
+    App.filter.selected = new Set(sorted);
+  } else {
+    App.filter.selected = new Set(Array.from(App.filter.selected).filter(v => values.has(v)));
+  }
+
+  const list = document.getElementById('filterValuesChecklist');
+  list.innerHTML = '';
+  if (!sorted.length){
+    list.innerHTML = '<p class="empty-note">Nenhum valor encontrado nesta coluna.</p>';
+    return;
+  }
+  sorted.forEach(v => {
+    const item = document.createElement('label');
+    item.className = 'checkitem';
+    const checked = App.filter.selected.has(v);
+    item.innerHTML = '<input type="checkbox" value="' + escapeAttr(v) + '" ' + (checked ? 'checked' : '') + ' onchange="toggleFilterValue(this)"> <span>' + (v === '' ? '<em>(vazio)</em>' : v) + '</span>';
+    list.appendChild(item);
+  });
+}
+
+function toggleFilterValue(chk){
+  if (chk.checked) App.filter.selected.add(chk.value);
+  else App.filter.selected.delete(chk.value);
+  refreshIndividualAfterFilterChange();
+  rebuildOutput();
+}
+
+function setAllFilterValues(all){
+  document.querySelectorAll('#filterValuesChecklist input[type=checkbox]').forEach(chk => {
+    chk.checked = all;
+    if (all) App.filter.selected.add(chk.value);
+    else App.filter.selected.delete(chk.value);
+  });
+  refreshIndividualAfterFilterChange();
+  rebuildOutput();
+}
+
+/* ---------------------------------------------------------
+   INDIVIDUAL SELECTION (choose specific people by name, one by one,
+   from within the rows already matching the column filter above)
+--------------------------------------------------------- */
+function getNonEmptyRows(){
+  return App.dataRows
+    .map((r, i) => ({ r, i }))
+    .filter(x => x.r.some(cell => cell !== '' && cell !== undefined));
+}
+
+// rows that pass the "Filtrar o que será impresso" column filter above
+function getRowsAfterColumnFilter(){
+  let rows = getNonEmptyRows();
+  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined){
+    rows = rows.filter(x => {
+      const v = x.r[App.filter.colIndex];
+      return App.filter.selected.has(v === undefined ? '' : String(v));
+    });
+  }
+  return rows;
+}
+
+// call after the column filter changes, to keep the individual list in sync
+function refreshIndividualAfterFilterChange(){
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
+    renderIndividualChecklist(false, false);
+  }
+}
+
+function onIndividualEnabledToggle(){
+  App.individualFilter.enabled = document.getElementById('individualFilterEnabled').checked;
+  document.getElementById('individualFilterBody').style.display = App.individualFilter.enabled ? 'block' : 'none';
+  if (App.individualFilter.enabled && App.individualFilter.colIndex === null){
+    populateIndividualColumnSelect();
+  }
+  rebuildOutput();
+}
+
+function populateIndividualColumnSelect(){
+  const sel = document.getElementById('individualColSelect');
+  sel.innerHTML = '';
+  for (let c = 0; c < App.numCols; c++){
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = colLetter(c) + ' — ' + App.columnNames[c];
+    sel.appendChild(opt);
+  }
+  let defaultCol = null;
+  for (let c = 0; c < App.numCols; c++){
+    if (App.columnNames[c] && App.columnNames[c].toLowerCase().includes('atleta')){ defaultCol = c; break; }
+  }
+  if (defaultCol === null && App.textFields.length) defaultCol = App.textFields[0].colIndex;
+  if (defaultCol === null) defaultCol = Math.min(App.numCols - 1, 4);
+
+  sel.value = defaultCol;
+  App.individualFilter.colIndex = defaultCol;
+  renderIndividualChecklist(true, true);
+}
+
+function onIndividualColumnChange(){
+  App.individualFilter.colIndex = parseInt(document.getElementById('individualColSelect').value, 10);
+  renderIndividualChecklist(true, true);
+  rebuildOutput();
+}
+
+function renderIndividualChecklist(selectAllDefault, resetSearch){
+  const rows = getRowsAfterColumnFilter();
+  App.individualRowsCache = rows;
+  if (selectAllDefault){
+    App.individualFilter.selectedRows = new Set(rows.map(x => x.i));
+  } else {
+    const validIdx = new Set(rows.map(x => x.i));
+    App.individualFilter.selectedRows = new Set(Array.from(App.individualFilter.selectedRows).filter(i => validIdx.has(i)));
+  }
+  const searchBox = document.getElementById('individualSearch');
+  const term = resetSearch ? '' : (searchBox ? searchBox.value : '');
+  if (resetSearch && searchBox) searchBox.value = '';
+  renderIndividualChecklistDOM(term);
+}
+
+function renderIndividualChecklistDOM(searchTerm){
+  const nameCol = App.individualFilter.colIndex;
+  const groupCol = App.filter.colIndex;
+  const list = document.getElementById('individualValuesChecklist');
+  list.innerHTML = '';
+  const term = (searchTerm || '').toLowerCase();
+  const rows = App.individualRowsCache || [];
+
+  const labelFor = (r, i) => (r[nameCol] !== undefined && r[nameCol] !== '') ? String(r[nameCol]) : ('Linha ' + (i + 1));
+
+  const buildItem = ({ r, i }) => {
+    const item = document.createElement('label');
+    item.className = 'checkitem';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.row = i;
+    chk.checked = App.individualFilter.selectedRows.has(i);
+    chk.addEventListener('change', () => toggleIndividualRow(chk));
+    const span = document.createElement('span');
+    span.textContent = labelFor(r, i);
+    item.appendChild(chk);
+    item.appendChild(span);
+    return item;
+  };
+
+  let shown = 0;
+
+  if (groupCol === null || groupCol === undefined){
+    // no column filter set — fall back to a flat list
+    rows.forEach(x => {
+      if (term && !labelFor(x.r, x.i).toLowerCase().includes(term)) return;
+      shown++;
+      list.appendChild(buildItem(x));
+    });
+  } else {
+    // group by the same column used in "Valores a imprimir", in the same order
+    const groups = new Map();
+    rows.forEach(x => {
+      const v = x.r[groupCol];
+      const key = v === undefined ? '' : String(v);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(x);
+    });
+    const sortedKeys = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+
+    let first = true;
+    sortedKeys.forEach(key => {
+      const groupRows = groups.get(key).filter(x => !term || labelFor(x.r, x.i).toLowerCase().includes(term));
+      if (!groupRows.length) return;
+      shown += groupRows.length;
+
+      list.appendChild(buildGroupHeader(key, groupRows));
+      first = false;
+
+      if (!App.individualCollapsedGroups.has(key)){
+        groupRows.forEach(x => list.appendChild(buildItem(x)));
+      }
+    });
+  }
+
+  if (!shown) list.innerHTML = '<p class="empty-note">Nenhum resultado.</p>';
+}
+
+function buildGroupHeader(key, groupRows){
+  const header = document.createElement('div');
+  header.className = 'individual-group-header';
+
+  const toggle = document.createElement('div');
+  toggle.className = 'g-toggle';
+  const chevron = document.createElement('span');
+  chevron.className = 'g-chevron';
+  chevron.textContent = App.individualCollapsedGroups.has(key) ? '▸' : '▾';
+  const title = document.createElement('span');
+  title.className = 'g-title';
+  title.textContent = (key === '' ? '(vazio)' : key) + ' (' + groupRows.length + ')';
+  toggle.appendChild(chevron);
+  toggle.appendChild(title);
+  toggle.title = App.individualCollapsedGroups.has(key) ? 'Expandir grupo' : 'Recolher grupo';
+  toggle.onclick = () => toggleGroupCollapse(key);
+
+  const actions = document.createElement('div');
+  actions.className = 'g-actions';
+  const selBtn = document.createElement('button');
+  selBtn.type = 'button';
+  selBtn.className = 'ghost';
+  selBtn.textContent = 'Selecionar';
+  selBtn.onclick = () => setGroupSelection(groupRows, true);
+  const clrBtn = document.createElement('button');
+  clrBtn.type = 'button';
+  clrBtn.className = 'ghost';
+  clrBtn.textContent = 'Limpar';
+  clrBtn.onclick = () => setGroupSelection(groupRows, false);
+  actions.appendChild(selBtn);
+  actions.appendChild(clrBtn);
+
+  header.appendChild(toggle);
+  header.appendChild(actions);
+  return header;
+}
+
+function toggleGroupCollapse(key){
+  if (App.individualCollapsedGroups.has(key)) App.individualCollapsedGroups.delete(key);
+  else App.individualCollapsedGroups.add(key);
+  const searchBox = document.getElementById('individualSearch');
+  renderIndividualChecklistDOM(searchBox ? searchBox.value : '');
+}
+
+function setGroupSelection(groupRows, all){
+  groupRows.forEach(x => {
+    if (all) App.individualFilter.selectedRows.add(x.i);
+    else App.individualFilter.selectedRows.delete(x.i);
+  });
+  const searchBox = document.getElementById('individualSearch');
+  renderIndividualChecklistDOM(searchBox ? searchBox.value : '');
+  rebuildOutput();
+}
+
+function toggleIndividualRow(chk){
+  const i = parseInt(chk.dataset.row, 10);
+  if (chk.checked) App.individualFilter.selectedRows.add(i);
+  else App.individualFilter.selectedRows.delete(i);
+  rebuildOutput();
+}
+
+function setAllIndividual(all){
+  document.querySelectorAll('#individualValuesChecklist input[type=checkbox]').forEach(chk => {
+    chk.checked = all;
+    const i = parseInt(chk.dataset.row, 10);
+    if (all) App.individualFilter.selectedRows.add(i);
+    else App.individualFilter.selectedRows.delete(i);
+  });
+  rebuildOutput();
+}
+
+function readPageConfig(){
+  App.page.marginTop = parseFloat(document.getElementById('cfgMarginTop').value) || 0;
+  App.page.marginLeft = parseFloat(document.getElementById('cfgMarginLeft').value) || 0;
+  App.page.gapX = parseFloat(document.getElementById('cfgGapX').value) || 0;
+  App.page.gapY = parseFloat(document.getElementById('cfgGapY').value) || 0;
+  App.page.labelW = parseFloat(document.getElementById('cfgLabelW').value) || 99;
+  App.page.labelH = parseFloat(document.getElementById('cfgLabelH').value) || 55.8;
+}
+
+function rebuildOutput(){
+  readPageConfig();
+  const cols = App.page.cols, rows = App.page.rows;
+  const totalW = App.page.marginLeft * 2 + cols * App.page.labelW + (cols - 1) * App.page.gapX;
+  const totalH = App.page.marginTop * 2 + rows * App.page.labelH + (rows - 1) * App.page.gapY;
+  const check = document.getElementById('cfgCheck');
+  const diffW = Math.abs(totalW - 210), diffH = Math.abs(totalH - 297);
+  check.innerHTML = 'Largura total calculada: ' + totalW.toFixed(1) + ' mm (folha A4 = 210 mm) &nbsp;•&nbsp; Altura total calculada: ' + totalH.toFixed(1) + ' mm (folha A4 = 297 mm)' +
+    ((diffW > 2 || diffH > 2) ? ' <span class="warn">— confira as margens, a diferença está acima de 2 mm.</span>' : ' ✓');
+
+  const perPage = cols * rows;
+  let rowsWithIndex = getNonEmptyRows();
+  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined){
+    rowsWithIndex = rowsWithIndex.filter(x => {
+      const v = x.r[App.filter.colIndex];
+      return App.filter.selected.has(v === undefined ? '' : String(v));
+    });
+  }
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
+    rowsWithIndex = rowsWithIndex.filter(x => App.individualFilter.selectedRows.has(x.i));
+  }
+  const rowsData = rowsWithIndex.map(x => x.r);
+  const pageCount = Math.max(1, Math.ceil(rowsData.length / perPage));
+  document.getElementById('pageCountLabel').textContent = rowsData.length + ' etiqueta(s) em ' + pageCount + ' página(s)' + (rowsData.length === 0 ? ' — nenhuma etiqueta corresponde à seleção atual' : '');
+
+  const out = document.getElementById('outputPages');
+  out.innerHTML = '';
+
+  if (!rowsData.length){
+    out.innerHTML = '<p class="empty-note">Nenhuma etiqueta corresponde à seleção atual (filtro por coluna e/ou seleção individual). Ajuste as marcações acima.</p>';
+    return;
+  }
+
+  for (let p = 0; p < pageCount; p++){
+    const pageEl = document.createElement('div');
+    pageEl.className = 'page';
+    pageEl.style.width = '210mm';
+    pageEl.style.height = '297mm';
+
+    const badge = document.createElement('div');
+    badge.className = 'page-badge no-print';
+    badge.textContent = 'Página ' + (p + 1) + ' de ' + pageCount;
+    pageEl.appendChild(badge);
+
+    for (let slot = 0; slot < perPage; slot++){
+      const dataIndex = p * perPage + slot;
+      const rowData = rowsData[dataIndex];
+      const r = Math.floor(slot / cols);
+      const c = slot % cols;
+      const left = App.page.marginLeft + c * (App.page.labelW + App.page.gapX);
+      const top = App.page.marginTop + r * (App.page.labelH + App.page.gapY);
+
+      const slotEl = document.createElement('div');
+      slotEl.className = 'label-slot';
+      slotEl.style.left = left + 'mm';
+      slotEl.style.top = top + 'mm';
+      slotEl.style.width = App.page.labelW + 'mm';
+      slotEl.style.height = App.page.labelH + 'mm';
+
+      if (rowData){
+        // QR
+        const qrImg = document.createElement('img');
+        qrImg.className = 'field';
+        qrImg.style.left = App.layout.qr.x + 'mm';
+        qrImg.style.top = App.layout.qr.y + 'mm';
+        qrImg.style.width = App.layout.qr.size + 'mm';
+        qrImg.style.height = App.layout.qr.size + 'mm';
+        qrImg.src = makeQRDataURL(rowData[App.codigoColIndex] || '');
+        slotEl.appendChild(qrImg);
+
+        // text fields
+        App.textFields.forEach(f => {
+          const cfg = App.layout.texts[f.key];
+          const el = document.createElement('div');
+          el.className = 'field';
+          el.textContent = rowData[f.colIndex] !== undefined ? String(rowData[f.colIndex]) : '';
+          el.style.left = cfg.x + 'mm';
+          el.style.top = cfg.y + 'mm';
+          el.style.fontSize = cfg.fontSize + 'mm';
+          el.style.fontWeight = cfg.bold ? '700' : '400';
+          el.style.textAlign = cfg.align;
+          el.style.fontFamily = cfg.fontFamily || FONT_OPTIONS[0].value;
+          el.style.maxWidth = (App.page.labelW - cfg.x - 2) + 'mm';
+          el.style.whiteSpace = 'normal';
+          slotEl.appendChild(el);
+        });
+
+        // static texts
+        App.staticTexts.forEach(st => {
+          const el = document.createElement('div');
+          el.className = 'field';
+          el.textContent = st.content;
+          el.style.left = st.x + 'mm';
+          el.style.top = st.y + 'mm';
+          el.style.fontSize = st.fontSize + 'mm';
+          el.style.fontWeight = st.bold ? '700' : '400';
+          el.style.textAlign = st.align;
+          el.style.fontFamily = st.fontFamily || FONT_OPTIONS[0].value;
+          slotEl.appendChild(el);
+        });
+      }
+
+      pageEl.appendChild(slotEl);
+    }
+    out.appendChild(pageEl);
+  }
+}
+
+/* ---------------------------------------------------------
+   PRINT (in a new window, to avoid artifact-sandbox print issues)
+--------------------------------------------------------- */
+const PRINT_CSS = `
+  *{box-sizing:border-box;}
+  body{ margin:0; }
+  .page{ position:relative; width:210mm; height:297mm; page-break-after:always; }
+  .page:last-child{ page-break-after:auto; }
+  .label-slot{ position:absolute; overflow:hidden; }
+  .field{ position:absolute; white-space:normal; line-height:1.05; color:#111; }
+  .field img{ display:block; width:100%; height:100%; }
+  .page-badge{ display:none; }
+  @page{ size:A4; margin:0; }
+`;
+
+function printPages(){
+  const status = document.getElementById('exportStatus');
+  const pagesEl = document.getElementById('outputPages');
+  if (!pagesEl.children.length){ status.textContent = 'Gere a pré-visualização primeiro.'; return; }
+
+  const win = window.open('', '_blank');
+  if (!win){
+    status.textContent = 'O navegador bloqueou a janela de impressão. Permita pop-ups para este site, ou use "Salvar como PDF".';
+    return;
+  }
+  win.document.write(
+    '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas</title><style>' + PRINT_CSS + '</style></head><body>' +
+    pagesEl.innerHTML +
+    '</body></html>'
+  );
+  win.document.close();
+  status.textContent = '';
+  const triggerPrint = () => { win.focus(); win.print(); };
+  if (win.document.readyState === 'complete') setTimeout(triggerPrint, 300);
+  else win.addEventListener('load', () => setTimeout(triggerPrint, 300));
+}
+
+/* ---------------------------------------------------------
+   SAVE AS PDF (renders each page to an image, then assembles a PDF)
+--------------------------------------------------------- */
+async function savePDF(){
+  const status = document.getElementById('exportStatus');
+  const pdfBtn = document.getElementById('pdfBtn');
+  const pageEls = document.querySelectorAll('#outputPages .page');
+  if (!pageEls.length){ status.textContent = 'Gere a pré-visualização primeiro.'; return; }
+
+  pdfBtn.disabled = true;
+  try{
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    for (let i = 0; i < pageEls.length; i++){
+      status.textContent = 'Gerando PDF... página ' + (i + 1) + ' de ' + pageEls.length;
+      const pageEl = pageEls[i];
+      const badge = pageEl.querySelector('.page-badge');
+      if (badge) badge.style.visibility = 'hidden';
+      const canvas = await html2canvas(pageEl, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+      if (badge) badge.style.visibility = '';
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      if (i > 0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+    }
+
+    pdf.save('etiquetas.pdf');
+    status.textContent = '✓ PDF gerado com sucesso.';
+  } catch(err){
+    console.error(err);
+    status.textContent = 'Não foi possível gerar o PDF. Tente novamente.';
+  } finally{
+    pdfBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
