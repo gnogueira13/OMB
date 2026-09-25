@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gerador de Etiquetas para OMB — Pimaco A4250</title>
+<title>Gerador de Etiquetas MB</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -156,7 +156,7 @@
 
 <header class="app-header">
   <div>
-    <h1 id="appTitle">Gerador de Etiquetas</h1>
+    <h1 id="appTitle">Gerador de Etiquetas MB</h1>
     <div class="sub" id="appSub">Planilha → QR Code → Etiquetas Pimaco A4250 / A4350 (2 colunas × 5 linhas, 99 × 55,8 mm)</div>
   </div>
   <div class="steps" id="stepsNav" style="display:none;">
@@ -409,12 +409,12 @@ const TEMPLATE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheet
 
 const VERSION_CONFIG = {
   OMB: {
-    title: "Gerador de Etiquetas para OMB",
+    title: "Gerador de Etiquetas MB",
     sub: "Planilha → QR Code → Etiquetas Pimaco A4250 / A4350 (2 colunas × 5 linhas, 99 × 55,8 mm)",
     platformHint: '📋 Esta plataforma foi construída para uso com folhas de etiqueta <strong>Pimaco modelo A4250 e A4350</strong> (folha A4, 2 colunas × 5 linhas, etiquetas de 99 × 55,8&nbsp;mm).'
   },
   FMR: {
-    title: "Gerador de Etiquetas para FMR",
+    title: "Gerador de Etiquetas MB",
     sub: "Planilha → QR Code → Etiquetas Pimaco A4250 / A4350 (2 colunas × 5 linhas, 99 × 55,8 mm) ou etiqueta para gráfica (9 × 5 cm, uma por página)",
     platformHint: '📋 Esta plataforma foi construída para uso com folhas de etiqueta <strong>Pimaco modelo A4250 e A4350</strong> (folha A4, 2 colunas × 5 linhas, etiquetas de 99 × 55,8&nbsp;mm). Também há a opção de <strong>etiqueta para gráfica</strong> (9 × 5&nbsp;cm, uma etiqueta por página).'
   }
