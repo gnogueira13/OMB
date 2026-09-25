@@ -268,9 +268,18 @@
 
   <!-- STEP 3: EDITOR -->
   <section class="step" id="step-editor">
+    <div class="card" id="labelTypeCard" style="display:none;">
+      <h2 style="font-size:14px;">Tipo de etiqueta</h2>
+      <p class="hint">Escolha o modelo de etiqueta a ser usado nesta diagramação.</p>
+      <div class="field-toolbar" id="labelTypeButtons" style="margin-top:0;">
+        <button type="button" class="primary" id="btnLabelPimaco" onclick="setLabelType('pimaco')">Etiqueta Pimaco</button>
+        <button type="button" id="btnLabelGrafica" onclick="setLabelType('grafica')">Etiqueta para gráfica</button>
+      </div>
+      <p class="hint" style="margin-top:8px;">Etiqueta para gráfica: 9 × 5&nbsp;cm, uma etiqueta por página na etapa de impressão.</p>
+    </div>
     <div class="card">
       <h2>3. Diagrame a etiqueta</h2>
-      <p class="hint">Arraste o QR code e os campos de texto para a posição que preferir dentro da etiqueta (99 × 55,8&nbsp;mm). Clique em um campo para ajustar tamanho da fonte, negrito e alinhamento. Os valores mostrados são apenas um exemplo (primeira linha da planilha).</p>
+      <p class="hint" id="editorHint">Arraste o QR code e os campos de texto para a posição que preferir dentro da etiqueta (99 × 55,8&nbsp;mm). Clique em um campo para ajustar tamanho da fonte, negrito e alinhamento. Os valores mostrados são apenas um exemplo (primeira linha da planilha).</p>
       <div class="editor-wrap">
         <div class="canvas-holder">
           <div id="editorCanvas"></div>
@@ -344,7 +353,7 @@
 
     <div class="card no-print">
       <h2>Ajuste fino da folha e impressão</h2>
-      <p class="hint">Valores padrão calculados para a folha Pimaco A4250 (A4, 2 colunas × 5 linhas, etiqueta 99 × 55,8&nbsp;mm). Imprima primeiro em papel comum e confira contra a folha de etiquetas antes de usar o adesivo — ajuste os valores abaixo se necessário.</p>
+      <p class="hint" id="outputFineTuneHint">Valores padrão calculados para a folha Pimaco A4250 (A4, 2 colunas × 5 linhas, etiqueta 99 × 55,8&nbsp;mm). Imprima primeiro em papel comum e confira contra a folha de etiquetas antes de usar o adesivo — ajuste os valores abaixo se necessário.</p>
       <div class="grid3">
         <div>
           <label class="field-label">Margem superior (mm)</label>
@@ -442,10 +451,19 @@ const App = {
   individualFilter: { enabled: false, colIndex: null, selectedRows: new Set() },
   individualCollapsedGroups: new Set(),
   selectedFieldKey: null,
-  staticCounter: 0
+  staticCounter: 0,
+  labelType: 'pimaco',   // 'pimaco' or 'grafica' (FMR only)
+  layoutSnapshots: { pimaco: null, grafica: null } // per label-type layout, so switching doesn't lose edits
 };
 
 const SCALE = 4; // px per mm in the editor canvas
+
+// Label type presets (FMR). Pimaco keeps the original sheet layout;
+// "grafica" is a single 9 x 5 cm label, one per printed page.
+const LABEL_PRESETS = {
+  pimaco:  { labelW: 99, labelH: 55.8, cols: 2, rows: 5, marginTop: 9, marginLeft: 6, gapX: 0, gapY: 0 },
+  grafica: { labelW: 90, labelH: 50,   cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 }
+};
 
 // Default QR position/size: bottom-right corner, small margin from the label edge
 function defaultQR(){
@@ -725,8 +743,85 @@ function proceedToEditor(){
     return;
   }
   initLayoutDefaults();
+  document.getElementById('labelTypeCard').style.display = (App.version === 'FMR') ? '' : 'none';
+  renderLabelTypeButtons();
+  updateEditorHint();
   buildEditorCanvas();
   goToStep('editor');
+}
+
+/* ---------------------------------------------------------
+   LABEL TYPE (FMR): Pimaco sheet vs. single label for a print shop
+--------------------------------------------------------- */
+function cloneLayoutState(){
+  return {
+    layout: JSON.parse(JSON.stringify(App.layout)),
+    staticTexts: JSON.parse(JSON.stringify(App.staticTexts))
+  };
+}
+function applyLayoutState(state){
+  App.layout = JSON.parse(JSON.stringify(state.layout));
+  App.staticTexts = JSON.parse(JSON.stringify(state.staticTexts));
+}
+function scaleLayoutState(state, scaleX, scaleY){
+  const fontScale = (scaleX + scaleY) / 2;
+  const scaled = { layout: { qr: {}, texts: {} }, staticTexts: [] };
+  scaled.layout.qr = {
+    x: round1(state.layout.qr.x * scaleX),
+    y: round1(state.layout.qr.y * scaleY),
+    size: round1(state.layout.qr.size * fontScale)
+  };
+  Object.keys(state.layout.texts).forEach(k => {
+    const t = state.layout.texts[k];
+    scaled.layout.texts[k] = Object.assign({}, t, {
+      x: round1(t.x * scaleX),
+      y: round1(t.y * scaleY),
+      fontSize: Math.round(t.fontSize * fontScale * 10) / 10
+    });
+  });
+  scaled.staticTexts = state.staticTexts.map(s => Object.assign({}, s, {
+    x: round1(s.x * scaleX),
+    y: round1(s.y * scaleY),
+    fontSize: Math.round(s.fontSize * fontScale * 10) / 10
+  }));
+  return scaled;
+}
+
+function setLabelType(type){
+  if (!LABEL_PRESETS[type] || App.labelType === type) return;
+  App.layoutSnapshots[App.labelType] = cloneLayoutState();
+
+  if (!App.layoutSnapshots[type]){
+    const fromPreset = LABEL_PRESETS[App.labelType];
+    const toPreset = LABEL_PRESETS[type];
+    const scaleX = toPreset.labelW / fromPreset.labelW;
+    const scaleY = toPreset.labelH / fromPreset.labelH;
+    App.layoutSnapshots[type] = scaleLayoutState(App.layoutSnapshots[App.labelType], scaleX, scaleY);
+  }
+  applyLayoutState(App.layoutSnapshots[type]);
+  Object.assign(App.page, LABEL_PRESETS[type]);
+  App.labelType = type;
+
+  renderLabelTypeButtons();
+  updateEditorHint();
+  buildEditorCanvas();
+}
+
+function renderLabelTypeButtons(){
+  const pimacoBtn = document.getElementById('btnLabelPimaco');
+  const graficaBtn = document.getElementById('btnLabelGrafica');
+  if (!pimacoBtn || !graficaBtn) return;
+  pimacoBtn.classList.toggle('primary', App.labelType === 'pimaco');
+  graficaBtn.classList.toggle('primary', App.labelType === 'grafica');
+}
+
+function updateEditorHint(){
+  const hint = document.getElementById('editorHint');
+  if (!hint) return;
+  const w = App.page.labelW, h = App.page.labelH;
+  const wLabel = (Math.round(w * 10) / 10).toString().replace('.', ',');
+  const hLabel = (Math.round(h * 10) / 10).toString().replace('.', ',');
+  hint.textContent = 'Arraste o QR code e os campos de texto para a posição que preferir dentro da etiqueta (' + wLabel + ' × ' + hLabel + ' mm). Clique em um campo para ajustar tamanho da fonte, negrito e alinhamento. Os valores mostrados são apenas um exemplo (primeira linha da planilha).';
 }
 
 function normalizeText(s){
@@ -1010,7 +1105,19 @@ function addStaticText(){
 function resetLayout(){
   App.layout = { qr: defaultQR(), texts: {} };
   App.staticTexts = [];
-  initLayoutDefaults();
+  App.staticCounter = 0;
+  initLayoutDefaults(); // always builds the Pimaco-proportioned defaults
+
+  if (App.labelType !== 'pimaco'){
+    const fromPreset = LABEL_PRESETS.pimaco;
+    const toPreset = LABEL_PRESETS[App.labelType];
+    const scaleX = toPreset.labelW / fromPreset.labelW;
+    const scaleY = toPreset.labelH / fromPreset.labelH;
+    const scaled = scaleLayoutState({ layout: App.layout, staticTexts: App.staticTexts }, scaleX, scaleY);
+    App.layout = scaled.layout;
+    App.staticTexts = scaled.staticTexts;
+  }
+  App.layoutSnapshots[App.labelType] = cloneLayoutState();
   buildEditorCanvas();
 }
 
@@ -1031,6 +1138,12 @@ function proceedToOutput(){
     const id = 'cfg' + k[0].toUpperCase() + k.slice(1);
     document.getElementById(id).value = App.page[k];
   });
+  const fineTuneHint = document.getElementById('outputFineTuneHint');
+  if (fineTuneHint){
+    fineTuneHint.textContent = (App.labelType === 'grafica')
+      ? 'Etiqueta para gráfica: uma etiqueta por página, tamanho 90 × 50 mm (9 × 5 cm). Ajuste os valores abaixo se necessário.'
+      : 'Valores padrão calculados para a folha Pimaco A4250 (A4, 2 colunas × 5 linhas, etiqueta 99 × 55,8 mm). Imprima primeiro em papel comum e confira contra a folha de etiquetas antes de usar o adesivo — ajuste os valores abaixo se necessário.';
+  }
   if (!App.filterInitialized){
     populateFilterColumnSelect();
     App.filterInitialized = true;
@@ -1355,10 +1468,16 @@ function rebuildOutput(){
   const cols = App.page.cols, rows = App.page.rows;
   const totalW = App.page.marginLeft * 2 + cols * App.page.labelW + (cols - 1) * App.page.gapX;
   const totalH = App.page.marginTop * 2 + rows * App.page.labelH + (rows - 1) * App.page.gapY;
+  App.page.computedW = totalW;
+  App.page.computedH = totalH;
   const check = document.getElementById('cfgCheck');
-  const diffW = Math.abs(totalW - 210), diffH = Math.abs(totalH - 297);
-  check.innerHTML = 'Largura total calculada: ' + totalW.toFixed(1) + ' mm (folha A4 = 210 mm) &nbsp;•&nbsp; Altura total calculada: ' + totalH.toFixed(1) + ' mm (folha A4 = 297 mm)' +
-    ((diffW > 2 || diffH > 2) ? ' <span class="warn">— confira as margens, a diferença está acima de 2 mm.</span>' : ' ✓');
+  if (App.labelType === 'grafica'){
+    check.innerHTML = 'Etiqueta para gráfica: uma etiqueta por página, tamanho da página = ' + totalW.toFixed(1) + ' × ' + totalH.toFixed(1) + ' mm ✓';
+  } else {
+    const diffW = Math.abs(totalW - 210), diffH = Math.abs(totalH - 297);
+    check.innerHTML = 'Largura total calculada: ' + totalW.toFixed(1) + ' mm (folha A4 = 210 mm) &nbsp;•&nbsp; Altura total calculada: ' + totalH.toFixed(1) + ' mm (folha A4 = 297 mm)' +
+      ((diffW > 2 || diffH > 2) ? ' <span class="warn">— confira as margens, a diferença está acima de 2 mm.</span>' : ' ✓');
+  }
 
   const perPage = cols * rows;
   let rowsWithIndex = getNonEmptyRows();
@@ -1386,8 +1505,8 @@ function rebuildOutput(){
   for (let p = 0; p < pageCount; p++){
     const pageEl = document.createElement('div');
     pageEl.className = 'page';
-    pageEl.style.width = '210mm';
-    pageEl.style.height = '297mm';
+    pageEl.style.width = totalW + 'mm';
+    pageEl.style.height = totalH + 'mm';
 
     const badge = document.createElement('div');
     badge.className = 'page-badge no-print';
@@ -1461,17 +1580,20 @@ function rebuildOutput(){
 /* ---------------------------------------------------------
    PRINT (in a new window, to avoid artifact-sandbox print issues)
 --------------------------------------------------------- */
-const PRINT_CSS = `
+function buildPrintCSS(){
+  const w = App.page.computedW || 210, h = App.page.computedH || 297;
+  return `
   *{box-sizing:border-box;}
   body{ margin:0; }
-  .page{ position:relative; width:210mm; height:297mm; page-break-after:always; }
+  .page{ position:relative; width:${w}mm; height:${h}mm; page-break-after:always; }
   .page:last-child{ page-break-after:auto; }
   .label-slot{ position:absolute; overflow:hidden; }
   .field{ position:absolute; white-space:normal; line-height:1.05; color:#111; }
   .field img{ display:block; width:100%; height:100%; }
   .page-badge{ display:none; }
-  @page{ size:A4; margin:0; }
+  @page{ size:${w}mm ${h}mm; margin:0; }
 `;
+}
 
 function printPages(){
   const status = document.getElementById('exportStatus');
@@ -1484,7 +1606,7 @@ function printPages(){
     return;
   }
   win.document.write(
-    '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas</title><style>' + PRINT_CSS + '</style></head><body>' +
+    '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas</title><style>' + buildPrintCSS() + '</style></head><body>' +
     pagesEl.innerHTML +
     '</body></html>'
   );
@@ -1507,7 +1629,9 @@ async function savePDF(){
   pdfBtn.disabled = true;
   try{
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const w = App.page.computedW || 210, h = App.page.computedH || 297;
+    const orientation = w > h ? 'landscape' : 'portrait';
+    const pdf = new jsPDF({ unit: 'mm', format: [w, h], orientation });
 
     for (let i = 0; i < pageEls.length; i++){
       status.textContent = 'Gerando PDF... página ' + (i + 1) + ' de ' + pageEls.length;
@@ -1517,8 +1641,8 @@ async function savePDF(){
       const canvas = await html2canvas(pageEl, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
       if (badge) badge.style.visibility = '';
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+      if (i > 0) pdf.addPage([w, h], orientation);
+      pdf.addImage(imgData, 'JPEG', 0, 0, w, h);
     }
 
     pdf.save('etiquetas.pdf');
