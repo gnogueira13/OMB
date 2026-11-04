@@ -444,7 +444,7 @@ const App = {
   codigoColIndex: 0,    // 0-based column index used for QR
   textFields: [],       // [{colIndex, label}]
   layout: {             // editor field layout, values in mm
-    qr: { x: 71, y: 27.8, size: 25 },
+    qr: null,            // set by initLayoutDefaults() (version-specific default)
     texts: {}           // key: fieldKey -> {x,y,fontSize,bold,align,label}
   },
   staticTexts: [],      // [{key, content, x,y,fontSize,bold,align}]
@@ -832,6 +832,11 @@ function normalizeText(s){
 }
 
 function initLayoutDefaults(){
+  if (App.version === 'FMR') initLayoutDefaultsFMR();
+  else initLayoutDefaultsOMB();
+}
+
+function initLayoutDefaultsOMB(){
   // only set defaults for fields that don't already have a layout (keeps user edits on Back/Forward)
   if (!App.layout.qr) App.layout.qr = defaultQR();
 
@@ -891,6 +896,79 @@ function initLayoutDefaults(){
     if (!App.layout.texts[f.key]){
       App.layout.texts[f.key] = { x: marginX, y: cursorY, fontSize: 3.5, bold: false, align: 'left', label: f.label, fontFamily: FONT_OPTIONS[0].value };
       cursorY += 8;
+    } else {
+      App.layout.texts[f.key].label = f.label;
+    }
+  });
+}
+
+// FMR default layout: nome em destaque no topo, QR à esquerda, e à direita
+// o cargo, seguido das legendas fixas "UNIDADE" e "CONTROLE" com seus valores —
+// conforme o modelo de crachá de referência (ex.: PROF LUIS CARLOS FIGUEIREDO).
+function initLayoutDefaultsFMR(){
+  if (!App.layout.qr) App.layout.qr = { x: 4, y: 15, size: 28 };
+
+  const marginX = 4;
+  const textX = 37;
+
+  const findField = (pred) => App.textFields.find(f => pred(normalizeText(f.label)));
+  const fAtleta = findField(n => n === 'atleta' || n.includes('nome'));
+  const fUnidade = findField(n => n === 'unidade');
+  const fCargo = findField(n => n.includes('cargo'));
+  const fControle = findField(n => n.includes('controle') || n.includes('dado'));
+  const knownKeys = new Set([fAtleta, fUnidade, fCargo, fControle].filter(Boolean).map(f => f.key));
+
+  // 1) Atleta/Nome — destaque no topo, negrito
+  if (fAtleta){
+    if (!App.layout.texts[fAtleta.key]){
+      App.layout.texts[fAtleta.key] = { x: marginX, y: 5, fontSize: 5, bold: true, align: 'left', label: fAtleta.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fAtleta.key].label = fAtleta.label;
+    }
+  }
+
+  // 2) Cargo — ao lado do QR, sem legenda
+  if (fCargo){
+    if (!App.layout.texts[fCargo.key]){
+      App.layout.texts[fCargo.key] = { x: textX, y: 16, fontSize: 3.6, bold: false, align: 'left', label: fCargo.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fCargo.key].label = fCargo.label;
+    }
+  }
+
+  // 3) legenda fixa "UNIDADE" + valor da Unidade
+  if (fUnidade){
+    const capKey = 'autoCaption_unidade';
+    if (!App.staticTexts.some(s => s.key === capKey)){
+      App.staticTexts.push({ key: capKey, content: 'UNIDADE', x: textX, y: 27, fontSize: 3.2, bold: true, align: 'left', fontFamily: FONT_OPTIONS[0].value, auto: true });
+    }
+    if (!App.layout.texts[fUnidade.key]){
+      App.layout.texts[fUnidade.key] = { x: textX, y: 32, fontSize: 3.2, bold: false, align: 'left', label: fUnidade.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fUnidade.key].label = fUnidade.label;
+    }
+  }
+
+  // 4) legenda fixa "CONTROLE" + valor (coluna "Dado opcional"/controle)
+  if (fControle){
+    const capKey = 'autoCaption_controle';
+    if (!App.staticTexts.some(s => s.key === capKey)){
+      App.staticTexts.push({ key: capKey, content: 'CONTROLE', x: textX, y: 43, fontSize: 3.2, bold: true, align: 'left', fontFamily: FONT_OPTIONS[0].value, auto: true });
+    }
+    if (!App.layout.texts[fControle.key]){
+      App.layout.texts[fControle.key] = { x: textX, y: 48, fontSize: 3.2, bold: false, align: 'left', label: fControle.label, fontFamily: FONT_OPTIONS[0].value };
+    } else {
+      App.layout.texts[fControle.key].label = fControle.label;
+    }
+  }
+
+  // qualquer outra coluna selecionada (ex.: Modalidade): empilhada abaixo do nome, estilo genérico
+  let cursorY = 52;
+  App.textFields.forEach(f => {
+    if (knownKeys.has(f.key)) return;
+    if (!App.layout.texts[f.key]){
+      App.layout.texts[f.key] = { x: marginX, y: cursorY, fontSize: 3, bold: false, align: 'left', label: f.label, fontFamily: FONT_OPTIONS[0].value };
+      cursorY += 6;
     } else {
       App.layout.texts[f.key].label = f.label;
     }
@@ -1106,10 +1184,10 @@ function addStaticText(){
   selectField(key);
 }
 function resetLayout(){
-  App.layout = { qr: defaultQR(), texts: {} };
+  App.layout = { qr: null, texts: {} };
   App.staticTexts = [];
   App.staticCounter = 0;
-  initLayoutDefaults(); // always builds the Pimaco-proportioned defaults
+  initLayoutDefaults(); // always builds the Pimaco-proportioned defaults (OMB or FMR, per App.version)
 
   if (App.labelType !== 'pimaco'){
     const fromPreset = LABEL_PRESETS.pimaco;
