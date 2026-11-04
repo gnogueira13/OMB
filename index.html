@@ -421,6 +421,16 @@ const VERSION_CONFIG = {
 };
 
 function selectVersion(v){
+  if (App.version !== v){
+    // OMB and FMR have independent diagramming layouts — never carry one's
+    // field positions (QR, texts, static captions) into the other.
+    App.layout = { qr: null, texts: {} };
+    App.staticTexts = [];
+    App.staticCounter = 0;
+    App.layoutSnapshots = { pimaco: null, grafica: null };
+    App.labelType = 'pimaco';
+    Object.assign(App.page, LABEL_PRESETS.pimaco);
+  }
   App.version = v;
   const cfg = VERSION_CONFIG[v];
   document.getElementById('appTitle').textContent = cfg.title;
