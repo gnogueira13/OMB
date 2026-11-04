@@ -359,6 +359,22 @@
         <button class="primary" onclick="addManualRow()">+ Adicionar etiqueta</button>
         <span id="manualEntryStatus" class="config-note" style="margin:0;"></span>
       </div>
+
+      <hr style="border:none; border-top:1px solid var(--line); margin:22px 0;">
+
+      <label class="field-label">Ou cole várias linhas de cadastro (uma etiqueta por linha)</label>
+      <p class="hint" style="margin-top:0;">Copie as linhas diretamente do Excel/Google Sheets — colunas na mesma ordem da planilha enviada: <span id="pasteColumnOrder"></span>. Se colar a linha de cabeçalho junto, ela é identificada e ignorada automaticamente.</p>
+      <textarea id="manualPasteArea" rows="5" oninput="previewPastedRows()" style="width:100%; font-family:inherit; font-size:13px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); resize:vertical;" placeholder="Cole aqui as linhas copiadas da planilha..."></textarea>
+      <div class="row-actions">
+        <button class="primary" onclick="addPastedRows()">+ Adicionar etiquetas coladas</button>
+        <span id="pasteRowsStatus" class="config-note" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div class="card no-print" id="nameEditCard" style="display:none;">
+      <h2>Editar nomes</h2>
+      <p class="hint">Corrija o nome de quem já está na lista de impressão atual, sem precisar recarregar a planilha. As alterações já refletem na pré-visualização abaixo.</p>
+      <div id="nameEditList" style="max-height:260px; overflow:auto;"></div>
     </div>
 
     <div class="card no-print">
@@ -1250,6 +1266,7 @@ function proceedToOutput(){
     App.filterInitialized = true;
   }
   renderManualEntryForm();
+  renderPasteColumnOrder();
   rebuildOutput();
   goToStep('output');
 }
@@ -1285,6 +1302,26 @@ function renderManualEntryForm(){
   });
 }
 
+// pushes a full-width row into App.dataRows and keeps it included in the
+// active column filter / individual selection; returns the new row index
+function addDataRow(row){
+  const newIndex = App.dataRows.length;
+  App.dataRows.push(row);
+  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined){
+    App.filter.selected.add(row[App.filter.colIndex] === undefined ? '' : String(row[App.filter.colIndex]));
+  }
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
+    App.individualFilter.selectedRows.add(newIndex);
+  }
+  return newIndex;
+}
+
+function refreshAfterRowsAdded(){
+  renderFilterChecklist(false);
+  refreshIndividualAfterFilterChange();
+  rebuildOutput();
+}
+
 function addManualRow(){
   const inputs = document.querySelectorAll('#manualEntryFields .manual-entry-input');
   const status = document.getElementById('manualEntryStatus');
@@ -1303,23 +1340,141 @@ function addManualRow(){
     return;
   }
 
-  const newIndex = App.dataRows.length;
-  App.dataRows.push(row);
-
-  // keep the new row included in the column filter and individual selection
-  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined){
-    App.filter.selected.add(row[App.filter.colIndex] === undefined ? '' : String(row[App.filter.colIndex]));
-  }
-  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
-    App.individualFilter.selectedRows.add(newIndex);
-  }
-
-  renderFilterChecklist(false);
-  refreshIndividualAfterFilterChange();
-  rebuildOutput();
+  addDataRow(row);
+  refreshAfterRowsAdded();
 
   inputs.forEach(inp => { inp.value = ''; });
   status.textContent = '✓ Etiqueta adicionada manualmente.';
+}
+
+function renderPasteColumnOrder(){
+  const el = document.getElementById('pasteColumnOrder');
+  if (!el) return;
+  const parts = [];
+  for (let c = 0; c < App.numCols; c++){
+    const name = (App.columnNames[c] && String(App.columnNames[c]).trim()) ? App.columnNames[c] : '';
+    parts.push(colLetter(c) + (name ? ' (' + name + ')' : ''));
+  }
+  el.textContent = parts.join(', ');
+}
+
+function parsePastedRows(text){
+  const lines = String(text || '').replace(/\r\n|\r/g, '\n').split('\n').filter(l => l.trim() !== '');
+  if (!lines.length) return { rows: [], skippedHeader: false };
+
+  // detect the column delimiter from the pasted text: tab (Excel/Sheets copy),
+  // then ';' or ',' as a fallback for a plain CSV-style paste
+  const sample = lines[0];
+  const delimiter = sample.includes('\t') ? '\t' : (sample.includes(';') ? ';' : ',');
+
+  const norm = v => normalizeText(String(v === undefined ? '' : v));
+  const header = (App.hasHeader && App.aoa[0]) ? App.aoa[0].map(norm) : null;
+
+  const rows = [];
+  let skippedHeader = false;
+  lines.forEach((line, idx) => {
+    const cells = line.split(delimiter).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+    if (idx === 0 && header && cells.length > 1 && cells.every((c, i) => norm(c) === (header[i] || ''))){
+      skippedHeader = true;
+      return;
+    }
+    const row = new Array(App.numCols).fill('');
+    let hasValue = false;
+    for (let c = 0; c < App.numCols; c++){
+      const v = cells[c] !== undefined ? cells[c] : '';
+      row[c] = v;
+      if (v) hasValue = true;
+    }
+    if (hasValue) rows.push(row);
+  });
+  return { rows, skippedHeader };
+}
+
+function previewPastedRows(){
+  const status = document.getElementById('pasteRowsStatus');
+  if (!status) return;
+  const { rows } = parsePastedRows(document.getElementById('manualPasteArea').value);
+  status.textContent = rows.length ? rows.length + ' linha(s) prontas para adicionar.' : '';
+}
+
+function addPastedRows(){
+  const textarea = document.getElementById('manualPasteArea');
+  const status = document.getElementById('pasteRowsStatus');
+  if (!textarea.value.trim()){
+    status.textContent = 'Cole ao menos uma linha antes de adicionar.';
+    return;
+  }
+
+  const { rows, skippedHeader } = parsePastedRows(textarea.value);
+  if (!rows.length){
+    status.textContent = 'Nenhuma linha válida encontrada no texto colado.';
+    return;
+  }
+
+  rows.forEach(row => addDataRow(row));
+  refreshAfterRowsAdded();
+
+  textarea.value = '';
+  status.textContent = '✓ ' + rows.length + ' etiqueta(s) adicionada(s) a partir do texto colado' + (skippedHeader ? ' (linha de cabeçalho ignorada)' : '') + '.';
+}
+
+/* ---------------------------------------------------------
+   NAME EDIT (fix the athlete's name right on the output step)
+--------------------------------------------------------- */
+function getAtletaColIndex(){
+  const f = App.textFields.find(f => {
+    const n = normalizeText(f.label);
+    return n === 'atleta' || n.includes('nome');
+  });
+  return f ? f.colIndex : null;
+}
+
+function renderNameEditList(){
+  const card = document.getElementById('nameEditCard');
+  const list = document.getElementById('nameEditList');
+  if (!card || !list) return;
+
+  const atletaCol = getAtletaColIndex();
+  if (atletaCol === null){
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+
+  let rowsWithIndex = getRowsAfterColumnFilter();
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
+    rowsWithIndex = rowsWithIndex.filter(x => App.individualFilter.selectedRows.has(x.i));
+  }
+
+  list.innerHTML = '';
+  if (!rowsWithIndex.length){
+    list.innerHTML = '<p class="empty-note">Nenhuma etiqueta na seleção atual.</p>';
+    return;
+  }
+
+  rowsWithIndex.forEach(x => {
+    const row = document.createElement('div');
+    row.className = 'checkitem';
+    row.style.justifyContent = 'flex-start';
+
+    const tag = document.createElement('span');
+    tag.className = 'colcode';
+    tag.style.flex = '0 0 auto';
+    tag.textContent = 'Linha ' + (x.i + 1);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = x.r[atletaCol] !== undefined ? x.r[atletaCol] : '';
+    input.style.flex = '1 1 auto';
+    input.addEventListener('change', () => {
+      App.dataRows[x.i][atletaCol] = input.value;
+      rebuildOutput();
+    });
+
+    row.appendChild(tag);
+    row.appendChild(input);
+    list.appendChild(row);
+  });
 }
 
 /* ---------------------------------------------------------
@@ -1672,6 +1827,7 @@ function rebuildOutput(){
 
   if (!rowsData.length){
     out.innerHTML = '<p class="empty-note">Nenhuma etiqueta corresponde à seleção atual (filtro por coluna e/ou seleção individual). Ajuste as marcações acima.</p>';
+    renderNameEditList();
     return;
   }
 
@@ -1748,6 +1904,7 @@ function rebuildOutput(){
     }
     out.appendChild(pageEl);
   }
+  renderNameEditList();
 }
 
 /* ---------------------------------------------------------
