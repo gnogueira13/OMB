@@ -362,11 +362,12 @@
 
       <hr style="border:none; border-top:1px solid var(--line); margin:22px 0;">
 
-      <label class="field-label">Ou cole várias linhas de cadastro (uma etiqueta por linha, colunas na mesma ordem da planilha — A, B, C…)</label>
-      <p class="hint" style="margin-top:0;">Copie as linhas diretamente do Excel/Google Sheets (ou de um texto separado por tabulação, ponto e vírgula ou vírgula) e cole abaixo.</p>
-      <textarea id="manualPasteArea" rows="5" style="width:100%; font-family:inherit; font-size:13px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); resize:vertical;" placeholder="Cole aqui as linhas copiadas da planilha..."></textarea>
+      <label class="field-label">Ou cole várias linhas de cadastro (uma etiqueta por linha)</label>
+      <p class="hint" style="margin-top:0;">Copie as linhas diretamente do Excel/Google Sheets — colunas na mesma ordem da planilha enviada: <span id="pasteColumnOrder"></span>. Se colar a linha de cabeçalho junto, ela é identificada e ignorada automaticamente.</p>
+      <textarea id="manualPasteArea" rows="5" oninput="previewPastedRows()" style="width:100%; font-family:inherit; font-size:13px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); resize:vertical;" placeholder="Cole aqui as linhas copiadas da planilha..."></textarea>
       <div class="row-actions">
         <button class="primary" onclick="addPastedRows()">+ Adicionar etiquetas coladas</button>
+        <span id="pasteRowsStatus" class="config-note" style="margin:0;"></span>
       </div>
     </div>
 
@@ -1265,6 +1266,7 @@ function proceedToOutput(){
     App.filterInitialized = true;
   }
   renderManualEntryForm();
+  renderPasteColumnOrder();
   rebuildOutput();
   goToStep('output');
 }
@@ -1345,44 +1347,75 @@ function addManualRow(){
   status.textContent = '✓ Etiqueta adicionada manualmente.';
 }
 
-function addPastedRows(){
-  const textarea = document.getElementById('manualPasteArea');
-  const status = document.getElementById('manualEntryStatus');
-  const text = textarea.value;
-  if (!text.trim()){
-    status.textContent = 'Cole ao menos uma linha antes de adicionar.';
-    return;
+function renderPasteColumnOrder(){
+  const el = document.getElementById('pasteColumnOrder');
+  if (!el) return;
+  const parts = [];
+  for (let c = 0; c < App.numCols; c++){
+    const name = (App.columnNames[c] && String(App.columnNames[c]).trim()) ? App.columnNames[c] : '';
+    parts.push(colLetter(c) + (name ? ' (' + name + ')' : ''));
   }
+  el.textContent = parts.join(', ');
+}
 
-  const lines = text.split(/\r\n|\r|\n/).filter(l => l.trim() !== '');
+function parsePastedRows(text){
+  const lines = String(text || '').replace(/\r\n|\r/g, '\n').split('\n').filter(l => l.trim() !== '');
+  if (!lines.length) return { rows: [], skippedHeader: false };
+
   // detect the column delimiter from the pasted text: tab (Excel/Sheets copy),
   // then ';' or ',' as a fallback for a plain CSV-style paste
   const sample = lines[0];
   const delimiter = sample.includes('\t') ? '\t' : (sample.includes(';') ? ';' : ',');
 
-  let added = 0;
-  lines.forEach(line => {
-    const cells = line.split(delimiter);
+  const norm = v => normalizeText(String(v === undefined ? '' : v));
+  const header = (App.hasHeader && App.aoa[0]) ? App.aoa[0].map(norm) : null;
+
+  const rows = [];
+  let skippedHeader = false;
+  lines.forEach((line, idx) => {
+    const cells = line.split(delimiter).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+    if (idx === 0 && header && cells.length > 1 && cells.every((c, i) => norm(c) === (header[i] || ''))){
+      skippedHeader = true;
+      return;
+    }
     const row = new Array(App.numCols).fill('');
     let hasValue = false;
     for (let c = 0; c < App.numCols; c++){
-      const v = (cells[c] !== undefined ? cells[c] : '').trim();
+      const v = cells[c] !== undefined ? cells[c] : '';
       row[c] = v;
       if (v) hasValue = true;
     }
-    if (!hasValue) return;
-    addDataRow(row);
-    added++;
+    if (hasValue) rows.push(row);
   });
+  return { rows, skippedHeader };
+}
 
-  if (!added){
+function previewPastedRows(){
+  const status = document.getElementById('pasteRowsStatus');
+  if (!status) return;
+  const { rows } = parsePastedRows(document.getElementById('manualPasteArea').value);
+  status.textContent = rows.length ? rows.length + ' linha(s) prontas para adicionar.' : '';
+}
+
+function addPastedRows(){
+  const textarea = document.getElementById('manualPasteArea');
+  const status = document.getElementById('pasteRowsStatus');
+  if (!textarea.value.trim()){
+    status.textContent = 'Cole ao menos uma linha antes de adicionar.';
+    return;
+  }
+
+  const { rows, skippedHeader } = parsePastedRows(textarea.value);
+  if (!rows.length){
     status.textContent = 'Nenhuma linha válida encontrada no texto colado.';
     return;
   }
 
+  rows.forEach(row => addDataRow(row));
   refreshAfterRowsAdded();
+
   textarea.value = '';
-  status.textContent = '✓ ' + added + ' etiqueta(s) adicionada(s) a partir do texto colado.';
+  status.textContent = '✓ ' + rows.length + ' etiqueta(s) adicionada(s) a partir do texto colado' + (skippedHeader ? ' (linha de cabeçalho ignorada)' : '') + '.';
 }
 
 /* ---------------------------------------------------------
