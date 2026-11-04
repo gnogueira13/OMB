@@ -352,6 +352,16 @@
     </div>
 
     <div class="card no-print">
+      <h2>Adicionar etiqueta manualmente</h2>
+      <p class="hint">Inclua etiquetas avulsas sem precisar recarregar a planilha — útil para convidados ou correções de última hora. Preencha os campos e clique em "Adicionar etiqueta".</p>
+      <div class="grid3" id="manualEntryFields"></div>
+      <div class="row-actions">
+        <button class="primary" onclick="addManualRow()">+ Adicionar etiqueta</button>
+        <span id="manualEntryStatus" class="config-note" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div class="card no-print">
       <h2>Ajuste fino da folha e impressão</h2>
       <p class="hint" id="outputFineTuneHint">Valores padrão calculados para a folha Pimaco A4250 (A4, 2 colunas × 5 linhas, etiqueta 99 × 55,8&nbsp;mm). Imprima primeiro em papel comum e confira contra a folha de etiquetas antes de usar o adesivo — ajuste os valores abaixo se necessário.</p>
       <div class="grid3">
@@ -421,6 +431,16 @@ const VERSION_CONFIG = {
 };
 
 function selectVersion(v){
+  if (App.version !== v){
+    // OMB and FMR have independent diagramming layouts — never carry one's
+    // field positions (QR, texts, static captions) into the other.
+    App.layout = { qr: null, texts: {} };
+    App.staticTexts = [];
+    App.staticCounter = 0;
+    App.layoutSnapshots = { pimaco: null, grafica: null };
+    App.labelType = 'pimaco';
+    Object.assign(App.page, LABEL_PRESETS.pimaco);
+  }
   App.version = v;
   const cfg = VERSION_CONFIG[v];
   document.getElementById('appTitle').textContent = cfg.title;
@@ -1229,8 +1249,77 @@ function proceedToOutput(){
     populateFilterColumnSelect();
     App.filterInitialized = true;
   }
+  renderManualEntryForm();
   rebuildOutput();
   goToStep('output');
+}
+
+/* ---------------------------------------------------------
+   MANUAL ENTRY (add a one-off label without re-uploading a sheet)
+--------------------------------------------------------- */
+function getManualEntryColumns(){
+  const cols = new Map(); // colIndex -> label
+  cols.set(App.codigoColIndex, 'Código (gera o QR code)');
+  App.textFields.forEach(f => { if (!cols.has(f.colIndex)) cols.set(f.colIndex, f.label); });
+  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined && !cols.has(App.filter.colIndex)){
+    const label = (App.columnNames[App.filter.colIndex] && App.columnNames[App.filter.colIndex].trim()) ? App.columnNames[App.filter.colIndex] : ('Coluna ' + colLetter(App.filter.colIndex));
+    cols.set(App.filter.colIndex, label + ' (usada no filtro)');
+  }
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null && !cols.has(App.individualFilter.colIndex)){
+    const label = (App.columnNames[App.individualFilter.colIndex] && App.columnNames[App.individualFilter.colIndex].trim()) ? App.columnNames[App.individualFilter.colIndex] : ('Coluna ' + colLetter(App.individualFilter.colIndex));
+    cols.set(App.individualFilter.colIndex, label + ' (busca individual)');
+  }
+  return Array.from(cols.entries()).sort((a, b) => a[0] - b[0]);
+}
+
+function renderManualEntryForm(){
+  const wrap = document.getElementById('manualEntryFields');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  getManualEntryColumns().forEach(([colIndex, label]) => {
+    const div = document.createElement('div');
+    const fieldId = 'manualEntry_' + colIndex;
+    div.innerHTML = '<label class="field-label" for="' + fieldId + '">' + escapeAttr(label) + '</label>' +
+      '<input type="text" id="' + fieldId + '" class="manual-entry-input" data-col="' + colIndex + '">';
+    wrap.appendChild(div);
+  });
+}
+
+function addManualRow(){
+  const inputs = document.querySelectorAll('#manualEntryFields .manual-entry-input');
+  const status = document.getElementById('manualEntryStatus');
+  if (!inputs.length) return;
+
+  const row = new Array(App.numCols).fill('');
+  let hasValue = false;
+  inputs.forEach(inp => {
+    const c = parseInt(inp.dataset.col, 10);
+    const v = inp.value.trim();
+    row[c] = v;
+    if (v) hasValue = true;
+  });
+  if (!hasValue){
+    status.textContent = 'Preencha ao menos um campo antes de adicionar.';
+    return;
+  }
+
+  const newIndex = App.dataRows.length;
+  App.dataRows.push(row);
+
+  // keep the new row included in the column filter and individual selection
+  if (App.filter.colIndex !== null && App.filter.colIndex !== undefined){
+    App.filter.selected.add(row[App.filter.colIndex] === undefined ? '' : String(row[App.filter.colIndex]));
+  }
+  if (App.individualFilter.enabled && App.individualFilter.colIndex !== null){
+    App.individualFilter.selectedRows.add(newIndex);
+  }
+
+  renderFilterChecklist(false);
+  refreshIndividualAfterFilterChange();
+  rebuildOutput();
+
+  inputs.forEach(inp => { inp.value = ''; });
+  status.textContent = '✓ Etiqueta adicionada manualmente.';
 }
 
 /* ---------------------------------------------------------
@@ -1269,6 +1358,7 @@ function onFilterColumnChange(){
   App.individualCollapsedGroups = new Set();
   renderFilterChecklist(true);
   refreshIndividualAfterFilterChange();
+  renderManualEntryForm();
   rebuildOutput();
 }
 
@@ -1356,6 +1446,7 @@ function onIndividualEnabledToggle(){
   if (App.individualFilter.enabled && App.individualFilter.colIndex === null){
     populateIndividualColumnSelect();
   }
+  renderManualEntryForm();
   rebuildOutput();
 }
 
@@ -1383,6 +1474,7 @@ function populateIndividualColumnSelect(){
 function onIndividualColumnChange(){
   App.individualFilter.colIndex = parseInt(document.getElementById('individualColSelect').value, 10);
   renderIndividualChecklist(true, true);
+  renderManualEntryForm();
   rebuildOutput();
 }
 
